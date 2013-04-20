@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <title></title>
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link href="{{ static_url('style/aio.css') }}" rel="stylesheet" type="text/css" />
+  </head>
+
+  <body>
+    <section class="main">
+      {% block main %}{% end %}
+    </section>
+
+    <footer>
+    </footer>
+    <script data-main="/static/js/app.js" src="//cdnjs.cloudflare.com/ajax/libs/require.js/2.1.5/require.min.js"></script>
+    <script>
+      require.config({
+        baseUrl: '/static/js',
+        paths: {
+          jquery: '//cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min',
+          underscore: '//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.4.4/underscore-min'
+        }
+      });
+      window.console = window.console || {log: function(){}};
+    </script>
+    {% block script %}{% end %}
+  </body>
+</html>
+<!-- vim: set et sw=2 ts=2 sts=2 ff=unix fenc=utf8: -->
+

@@ -1,0 +1,18 @@
+{% extends ../base.html %}
+
+{% block main %}
+<input type=file id=J_live_video />
+{% end %}
+
+{% block script %}
+<script>
+  require(['jquery', 'file_meta'], function($, file_meta) {
+    $('#J_live_video').on('change', function(evt) {
+      console.log(evt.target.files[0]);
+      file_meta.build(evt.target.files[0], function(result) {
+        console.log(result);
+      });
+    });
+  });
+</script>
+{% end %}
