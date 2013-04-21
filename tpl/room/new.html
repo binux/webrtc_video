@@ -1,7 +1,10 @@
 {% extends ../base.html %}
 
 {% block main %}
-<input type=file id=J_live_video />
+<input type=file id=J_live_video disabled />
+<div class="progress">
+  <div id="J_hash" class="progress-bar"></div>
+</div>
 {% end %}
 
 {% block script %}
@@ -9,10 +12,15 @@
   require(['jquery', 'file_meta'], function($, file_meta) {
     $('#J_live_video').on('change', function(evt) {
       console.log(evt.target.files[0]);
-      file_meta.build(evt.target.files[0], function(result) {
+      var builder = file_meta.build(evt.target.files[0]);
+      builder.onload = function(result) {
         console.log(result);
-      });
+      };
+      builder.onprogress = function(data) {
+        $('#J_hash').width(data.done/data.total*100+'%');
+      };
     });
+    $('#J_live_video').attr('disabled', false);
   });
 </script>
 {% end %}

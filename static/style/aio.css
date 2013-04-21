@@ -1,0 +1,10 @@
+@import 'normalize.css';
+.progress {
+  height: 20px;
+  border: 1px solid #2980b9;
+}
+.progress .progress-bar {
+  height: 100%;
+  width: 0%;
+  background-color: #3498db;
+}

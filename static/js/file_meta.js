@@ -4,7 +4,7 @@
 // Created on 2013-04-20 20:17:45
 
 define(['underscore', 'lib/sha1'], function() {
-  var works_cnt = 5;
+  var workers_cnt = 4; //will crash when using multiple workers
 
   return {
     choice_piece_size: function(file_size) {
@@ -19,58 +19,67 @@ define(['underscore', 'lib/sha1'], function() {
       return piece_size >> 4;
     },
 
-    calculate_hash: function(file, piece_size, callback) {
-      var i, workers = [];
-      var result = [], total_pieces = Math.floor(file.size / piece_size);
+    calculate_hash: function(result) {
+      var i,
+          workers = [],
+          file = result.file,
+          total_pieces = Math.floor(file.size / result.piece_size);
+
+      result.sha1_array = [];
+      if (_.isFunction(result.onload))
+        result.onload = _.bind(result.onload, result);
+      if (_.isFunction(result.onprogress))
+        result.onprogress = _.bind(result.onprogress, result);
 
       function check_finished() {
-        if (result.length == total_pieces && _.every(result, _.isString)) {
+        var done = result.sha1_array.length - _.filter(result.sha1_array, _.isUndefined).length;
+
+        if (_.size(result.sha1_array) === total_pieces && done === total_pieces) {
           var sha1 = CryptoJS.algo.SHA1.create();
-          _.map(result, _.bind(sha1.update, sha1));
-          callback({sha1_array: result, hash: sha1.finalize().toString()});
-          return true;
+          _.map(result.sha1_array, _.bind(sha1.update, sha1));
+          result.hash = sha1.finalize().toString();
+          if (_.isFunction(result.onload)) {
+            result.onload(result);
+          }
         }
-        return false;
+
+        if (_.isFunction(result.onprogress)) {
+          result.onprogress({done: done, total: total_pieces});
+        }
       }
 
-      for (i=0; i<works_cnt; ++i) {
+      for (i=0; i<workers_cnt; ++i) {
         var worker = new Worker('/static/js/sha1_worker.js');
         worker.onmessage = function(evt) {
           console.log('sha1-worker result: ', evt.data);
-          result[evt.data.id] = evt.data.hash;
+          window.URL.revokeObjectURL(evt.data.blob);
+          result.sha1_array[evt.data.id] = evt.data.hash;
           check_finished();
         };
         workers.push(worker);
       }
 
       for (i=0; i<total_pieces; ++i) {
-        var reader = new FileReader();
-        reader.onload = (function(i) {
-          return function(evt) {
-            workers[i%works_cnt].postMessage({id: i, data: evt.target.result});
-          };
-        })(i);
-        reader.readAsBinaryString(file.slice(piece_size*i, piece_size*(i+1)));
+        var blob = result.file.slice(result.piece_size*i, result.piece_size*(i+1));
+        workers[i%workers_cnt].postMessage(_.clone({id: i, blob: window.URL.createObjectURL(blob)}));
       }
     },
 
-    build: function(file, callback) {
+    build: function(file) {
       var file_size = file.size;
       var piece_size = this.choice_piece_size(file_size);
       var block_size = this.choice_block_size(piece_size);
       var result = {
+        'file': file,
         'filename': file.name,
         'type': file.type,
         'size': file.size,
         'piece_size': piece_size,
         'block_size': block_size
       };
+      this.calculate_hash(result);
 
-      function _callback(hash) {
-        callback(_.extend(result, hash));
-      }
-
-      this.calculate_hash(file, piece_size, _callback);
+      return result;
     }
   };
 });

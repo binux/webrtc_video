@@ -7,5 +7,9 @@ importScripts('/static/js/lib/sha1.js');
 
 self.onmessage = function(evt) {
   var data = evt.data;
-  self.postMessage({id: data.id, hash: CryptoJS.SHA1(data.data).toString()});
+  var req = new XMLHttpRequest();
+  req.open('GET', data.blob, false);
+  req.send();
+  self.postMessage({id: data.id, hash: CryptoJS.SHA1(req.response).toString(), blob: data.blob});
+  req.response = null;
 };
