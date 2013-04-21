@@ -9,7 +9,7 @@ self.onmessage = function(evt) {
   var data = evt.data;
   var req = new XMLHttpRequest();
   req.open('GET', data.blob, false);
-  req.send();
+  req.send(null);
   self.postMessage({id: data.id, hash: CryptoJS.SHA1(req.response).toString(), blob: data.blob});
   req.response = null;
 };

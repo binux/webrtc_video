@@ -27,11 +27,11 @@ define(['underscore', 'lib/sha1'], function() {
 
       result.sha1_array = [];
       if (_.isFunction(result.onload))
-        result.onload = _.bind(result.onload, result);
+        result.onload = _.once(_.bind(result.onload, result));
       if (_.isFunction(result.onprogress))
         result.onprogress = _.bind(result.onprogress, result);
 
-      function check_finished() {
+      var check_finished = _.throttle(function() {
         var done = result.sha1_array.length - _.filter(result.sha1_array, _.isUndefined).length;
 
         if (_.size(result.sha1_array) === total_pieces && done === total_pieces) {
@@ -46,7 +46,7 @@ define(['underscore', 'lib/sha1'], function() {
         if (_.isFunction(result.onprogress)) {
           result.onprogress({done: done, total: total_pieces});
         }
-      }
+      }, 100);
 
       for (i=0; i<workers_cnt; ++i) {
         var worker = new Worker('/static/js/sha1_worker.js');

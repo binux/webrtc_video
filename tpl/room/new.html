@@ -12,7 +12,9 @@
   require(['jquery', 'file_meta'], function($, file_meta) {
     $('#J_live_video').on('change', function(evt) {
       console.log(evt.target.files[0]);
+      $('#J_hash').width(0+'%');
       var builder = file_meta.build(evt.target.files[0]);
+      window.builder = builder;
       builder.onload = function(result) {
         console.log(result);
       };
