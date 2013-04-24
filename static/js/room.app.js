@@ -5,6 +5,20 @@
 
 define(['jquery', 'p2p'], function($, p2p) {
   var client = new p2p.Client();
+  client.onready = function() {
+    client.join_room(window.roomid);
+    client.update_peer_list();
+    setTimeout(function() {
+      for (var key in client.peer_list) {
+        if (key == client.peerid) continue;
+        var peer = client.ensure_connection(key);
+        peer.connect();
+        peer.onready = function() {
+          peer.data_channel.send('hello world from '+client.peerid);
+        };
+      }
+    }, 5000);
+  };
 
   return {
     client: client
