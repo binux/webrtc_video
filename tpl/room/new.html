@@ -1,28 +1,24 @@
 {% extends ../base.html %}
 
 {% block main %}
-<input type=file id=J_live_video disabled />
-<div class="progress">
-  <div id="J_hash" class="progress-bar"></div>
-</div>
+<section class=new-file>
+  <div id=J_box class=main-box>
+    <ul>
+      <li>filename</li>
+    </ul>
+
+    <div class=progress>
+      <div id=J_hash class=progress-bar></div>
+    </div>
+  </div>
+  <input type=file class=hidden id=J_live_video />
+</section>
 {% end %}
 
 {% block script %}
 <script>
-  require(['jquery', 'file_meta'], function($, file_meta) {
-    $('#J_live_video').on('change', function(evt) {
-      console.log(evt.target.files[0]);
-      $('#J_hash').width(0+'%');
-      var builder = file_meta.build(evt.target.files[0]);
-      window.builder = builder;
-      builder.onload = function(result) {
-        console.log(result);
-      };
-      builder.onprogress = function(data) {
-        $('#J_hash').width(data.done/data.total*100+'%');
-      };
-    });
-    $('#J_live_video').attr('disabled', false);
+  require(['room_new.app'], function(room) {
+    window.client = room.client;
   });
 </script>
 {% end %}

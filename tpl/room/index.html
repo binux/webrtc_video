@@ -1,0 +1,16 @@
+{% extends ../base.html %}
+
+{% block main %}
+{% end %}
+
+{% block script %}
+<script>
+  require(['room.app'], function(room) {
+    room.client.onready = function() {
+      room.client.join_room('{{ roomid }}');
+      room.client.update_peer_list();
+    };
+    window.client = room.client;
+  });
+</script>
+{% end %}

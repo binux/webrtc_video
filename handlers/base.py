@@ -14,7 +14,7 @@ from tornado.options import options
 __ALL__ = ['HTTPError', 'BaseHandler', 'BaseWebSocket', 'BaseUIModule', ]
 
 class BaseHandler(tornado.web.RequestHandler):
-    application_export = set(())
+    application_export = set(('room_manager', ))
     def __getattr__(self, key):
         if key in self.application_export:
             return getattr(self.application, key)
@@ -26,7 +26,11 @@ class BaseHandler(tornado.web.RequestHandler):
         return super(BaseHandler, self).render_string(template_name, **kwargs)
 
 class BaseWebSocket(tornado.websocket.WebSocketHandler):
-    pass
+    application_export = set(('room_manager', ))
+    def __getattr__(self, key):
+        if key in self.application_export:
+            return getattr(self.application, key)
+        super(BaseWebSocket, self).__getattr__(key)
 
 class BaseUIModule(tornado.web.UIModule):
     pass

@@ -9,6 +9,7 @@ import os.path
 import logging
 import tornado.web
 from tornado.options import define, options
+from libs.room_manager import RoomManager
 
 define("bind", default="127.0.0.1", help="addrs that debugger bind to")
 define("port", default=8888, help="the port that debugger listen to")
@@ -29,6 +30,8 @@ class Application(tornado.web.Application):
                 )
         super(Application, self).__init__(handlers, **settings)
 
+        self.room_manager = RoomManager()
+
 
 if __name__ == "__main__":
     import tornado.options
@@ -39,6 +42,9 @@ if __name__ == "__main__":
     if options.config:
         tornado.options.parse_config_file(options.config)
     tornado.options.parse_command_line()
+
+    if options.debug:
+        import logging;logging.getLogger().setLevel(logging.DEBUG)
 
     http_server = HTTPServer(Application(), xheaders=True)
     http_server.bind(options.port, options.bind)
