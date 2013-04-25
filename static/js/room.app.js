@@ -13,9 +13,9 @@ define(['jquery', 'p2p'], function($, p2p) {
         if (key == client.peerid) continue;
         var peer = client.ensure_connection(key);
         peer.connect();
-        peer.onready = function() {
-          peer.data_channel.send('hello world from '+client.peerid);
-        };
+        peer.onready = _.bind(function() {
+          this.send('hello world from '+client.peerid);
+        }, peer);
       }
     }, 5000);
   };

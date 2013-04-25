@@ -36,8 +36,15 @@ define(['underscore', 'peer'], function(__, peer) {
       if (this.peers[peerid]) {
         return this.peers[peerid];
       } else {
-        this.peers[peerid] = new peer.Peer(this.ws, this.peerid, peerid);
-        return this.peers[peerid];
+        var p = new peer.Peer(this.ws, this.peerid, peerid);
+        var thi$ = this;
+        p.onclose = function() {
+          console.log('peer connect with '+peerid+' disconnected;');
+          thi$.peers[peerid] = null;
+          delete thi$.peers[peerid];
+        };
+        this.peers[peerid] = p;
+        return p;
       }
     },
 

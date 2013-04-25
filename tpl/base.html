@@ -22,6 +22,7 @@
     <script data-main="/static/js/app.js" src="//cdnjs.cloudflare.com/ajax/libs/require.js/2.1.5/require.min.js"></script>
     <script>
       require.config({
+        {% if options.debug %}urlArgs: "bust=" + (new Date()).getTime(),{% end %}
         baseUrl: '/static/js',
         paths: {
           jquery: '//cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min',

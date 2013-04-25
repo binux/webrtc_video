@@ -62,6 +62,7 @@ define(['underscore'], function() {
         this.peer_connection.onaddstream = _.bind(this.onaddstream, this);
         this.peer_connection.onremovestream = _.bind(this.onremovestream, this);
         this.peer_connection.ondatachannel = _.bind(this.ondatachannel, this);
+        this.peer_connection.oniceconnectionstatechange = _.bind(this.oniceconnectionstatechange, this);
       } catch (e) {
         console.log('Failed to create PeerConnection, exception: '+e.message);
       }
@@ -85,6 +86,7 @@ define(['underscore'], function() {
         option = {reliable: false};
       this.data_channel = this.peer_connection.createDataChannel(label || 'RTCDataChannel', option);
       this.data_channel.onopen = _.bind(this.ondatachannelopen, this);
+      // Offer MUST created after data channel created
       var constraints = {"mandatory":{},"optional":[]};
       this.peer_connection.createOffer(_.bind(this.onoffer, this), null, constraints);
     },
@@ -92,8 +94,45 @@ define(['underscore'], function() {
     listen: function() {
     },
 
+    send: function(obj) {
+      if (this.peer_connection && !this.ready) {
+        _.delay(_.bind(this.send, this), 2000, obj);
+      } else {
+        this.data_channel.send(obj);
+      }
+    },
+
+    close: function() {
+      if (this.data_channel) {
+        this.data_channel.close();
+        this.data_channel = null;
+      }
+      if (this.peer_connection) {
+        this.peer_connection.close();
+        this.peer_connection = null;
+      }
+      this.ready = false;
+
+      if (_.isFunction(this.onclose)) {
+        this.onclose();
+      }
+    },
+
+    // export
+    onready: function() {},
+    onclose: function() {},
+    onmessage: function() {},
+
+
+    wssend: function(obj) {
+      if (!_.isString(obj)) {
+        obj = JSON.stringify(obj);
+      }
+      this.ws.send(obj);
+    },
+
     onwsmessage: function(data) {
-      console.debug('peer:', data);
+      //console.debug('peer:', data);
       if (data.type == 'candidate') {
         var candidate = new RTCIceCandidate(data.candidate);
         this.peer_connection.addIceCandidate(candidate);
@@ -110,22 +149,31 @@ define(['underscore'], function() {
         // end of candidates
         return ;
       }
-      this.ws.send(JSON.stringify({
+      this.wssend({
         type: 'candidate',
         candidate: evt.candidate,
         target: this.target,
         origin: this.origin
-      }));
+      });
     },
 
     onoffer: function(desc) {
       this.peer_connection.setLocalDescription(desc);
-      this.ws.send(JSON.stringify({
+      this.wssend({
         type: 'offer',
         desc: desc,
         target: this.target,
         origin: this.origin
-      }));
+      });
+    },
+
+    oniceconnectionstatechange: function(evt) {
+      switch (evt.target.iceConnectionState) {
+        case 'disconnected':
+        case 'failed':
+        case 'closed':
+          this.close();
+      }
     },
 
     onaddstream: function() {},
@@ -150,9 +198,12 @@ define(['underscore'], function() {
     },
     ondatachannelmessage: function(evt) {
       console.log('datachannel:', evt.data);
+      if (this.onmessage) {
+        this.onmessage(evt.data);
+      }
     },
     ondatachannelclose: function() {
-      this.data_channel = null;
+      this.close();
     }
   };
 
