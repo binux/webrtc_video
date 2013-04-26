@@ -183,6 +183,8 @@ define(['underscore'], function() {
       console.debug('DataChannel created.');
       this.data_channel = evt.channel;
       this.bind_channel_event();
+      this.ready = true;
+      if (_.isFunction(this.onready)) { this.onready(); }
     },
 
     bind_channel_event: function() {
@@ -193,6 +195,7 @@ define(['underscore'], function() {
 
     ondatachannelopen: function() {
       console.debug('DataChannel openned.');
+      this.bind_channel_event();
       this.ready = true;
       if (_.isFunction(this.onready)) { this.onready(); }
     },
@@ -207,7 +210,83 @@ define(['underscore'], function() {
     }
   };
 
+  // inherit Peer to support chunked data for chrome
+  function PeerWithChunkSupport(ws, target, origin) {
+    this.constructer = Peer;
+    this.constructer(ws, target, origin);
+    delete this.constructer;
+
+    this.chunk_size = 800;
+    this.window_size = 30;
+    this.resend_interval = 5000;
+    this.block_no = 1;
+    this.packet_no = 1;
+    
+    this.send_queue = [];
+    this.send_cache = {};
+    this.block_cache = {};
+  }
+  PeerWithChunkSupport.prototype = _.clone(Peer.prototype);
+
+  PeerWithChunkSupport.prototype.send = function(data) {
+    var data_size = data.size || data.length;
+    var total_packets = Math.ceil(1.0*data_size/this.chunk_size);
+    for (var i=0; i<total_packets; ++i) {
+      this.send_queue.push({
+               b: this.block_no,  // block no.
+               p: this.packet_no, // packet no.
+               i: i,              // chunk no.
+               t: total_packets,   // total no.
+               d: data});           // data
+      this.packet_no++;
+    }
+    this.block_no++;
+    this.process();
+  };
+
+  PeerWithChunkSupport.prototype.retry_send = function(p) {
+    if (_.has(this.send_cache, p)) {
+      this.data_channel.send(JSON.stringify(this.send_cache[p]));
+      _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
+      //console.log('send packet: '+p);
+    }
+  };
+
+  PeerWithChunkSupport.prototype.process = function() {
+    while(this.send_queue.length > 0 && _.size(this.send_cache) < this.window_size) {
+      var pkg = this.send_queue.shift();
+      this.send_cache[pkg.p] = pkg;
+      this.retry_send(pkg.p);
+    }
+  };
+  
+  PeerWithChunkSupport.prototype.ondatachannelmessage = function(evt) {
+    var msg = JSON.parse(evt.data);
+    //console.log(msg);
+    if (_.has(msg, 'ack')) {
+      if (this.send_cache[msg.ack]) {
+        delete this.send_cache[msg.ack];
+        this.process();
+      }
+    } else {
+      if (!_.has(this.block_cache, msg.b)) {
+        this.block_cache[msg.b] = {};
+      }
+      this.block_cache[msg.b][msg.i] = msg.d;
+      console.log({ack:1,p:msg.p});
+      this.data_channel.send(JSON.stringify({ack:msg.p}));
+
+      // recived all blocks
+      if (msg.t == _.size(this.block_cache[msg.b])) {
+        if (_.isFunction(this.onmessage)) {
+          this.onmessage(_.values(this.block_cache[msg.b]).join(''));
+        }
+        delete this.block_cache[msg.b];
+      }
+    }
+  };
+
   return {
-    Peer: Peer
+    Peer: PeerWithChunkSupport
   };
 });

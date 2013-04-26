@@ -24,7 +24,7 @@ define(['underscore', 'lib/sha1'], function() {
           workers = [],
           file = builder.file,
           piece_size = builder.result.piece_size,
-          total_pieces = Math.floor(file.size / piece_size);
+          total_pieces = builder.result.piece_cnt;
 
       var sha1_array = [];
 
@@ -70,11 +70,12 @@ define(['underscore', 'lib/sha1'], function() {
       var piece_size = this.choice_piece_size(file_size);
       var block_size = this.choice_block_size(piece_size);
       var result = {
-        'filename': file.name,
-        'type': file.type,
-        'size': file.size,
-        'piece_size': piece_size,
-        'block_size': block_size
+        filename: file.name,
+        type: file.type,
+        size: file.size,
+        piece_size: piece_size,
+        piece_cnt: Math.ceil(1.0*file_size / piece_size),
+        block_size: block_size
       };
 
       var builder = {
