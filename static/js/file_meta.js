@@ -3,8 +3,8 @@
 //         http://binux.me
 // Created on 2013-04-20 20:17:45
 
-define(['underscore', 'lib/sha1'], function() {
-  var workers_cnt = 2; //will crash when using multiple workers
+define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
+  var workers_cnt = 4; //will crash when using multiple workers
 
   return {
     choice_piece_size: function(file_size) {
@@ -32,9 +32,7 @@ define(['underscore', 'lib/sha1'], function() {
         var done = sha1_array.length - _.filter(sha1_array, _.isUndefined).length;
 
         if (done === total_pieces) {
-          var sha1 = CryptoJS.algo.SHA1.create();
-          _.map(sha1_array, _.bind(sha1.update, sha1));
-          builder.result.hash = sha1.finalize().toString();
+          builder.result.hash = sha1.hash(sha1_array.join(''));
           builder.result.sha1_array = sha1_array;
           if (_.isFunction(builder.onload) && !builder.onload_once) {
             builder.onload_once = true;
