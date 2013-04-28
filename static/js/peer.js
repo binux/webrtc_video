@@ -4,7 +4,7 @@
 // Created on 2013-04-24 10:48:28
 
 
-define(['underscore'], function() {
+define(['underscore'], function(__) {
   var Browser = null;
   var RTCPeerConnection = null;
 
@@ -23,6 +23,7 @@ define(['underscore'], function() {
     this.origin = origin;
     this.target = target;
     this.ready = false;
+    this.closed = false;
 
     this.peer_connection = null;
     this.data_channel = null;
@@ -39,7 +40,7 @@ define(['underscore'], function() {
 
     this.pc_constraints = {
       optional: [
-        {DtlsSrtpKeyAgreement: true},
+        //{DtlsSrtpKeyAgreement: true},
         {RtpDataChannels: true}
       ]
     };
@@ -62,7 +63,7 @@ define(['underscore'], function() {
         this.peer_connection.onaddstream = _.bind(this.onaddstream, this);
         this.peer_connection.onremovestream = _.bind(this.onremovestream, this);
         this.peer_connection.ondatachannel = _.bind(this.ondatachannel, this);
-        this.peer_connection.oniceconnectionstatechange = _.bind(this.oniceconnectionstatechange, this);
+        this.peer_connection.oniceconnectionstatechange = _.throttle(_.bind(this.oniceconnectionstatechange, this), 500);
       } catch (e) {
         console.log('Failed to create PeerConnection, exception: '+e.message);
       }
@@ -95,6 +96,11 @@ define(['underscore'], function() {
     },
 
     send: function(obj) {
+      if (this.closed)
+        return ;
+      if (_.isObject(obj)) {
+        obj = JSON.stringify(obj);
+      }
       if (this.peer_connection && !this.ready) {
         _.delay(_.bind(this.send, this), 2000, obj);
       } else {
@@ -112,6 +118,7 @@ define(['underscore'], function() {
         this.peer_connection = null;
       }
       this.ready = false;
+      this.closed = true;
 
       if (_.isFunction(this.onclose)) {
         this.onclose();
@@ -123,6 +130,12 @@ define(['underscore'], function() {
     onclose: function() {},
     onmessage: function() {},
 
+    transformOutgoingSdp: function(sdp) {
+      // important
+      var splitted = sdp.split("b=AS:30");
+      var newSDP = splitted[0] + "b=AS:1638400" + splitted[1];
+      return newSDP;
+    },
 
     wssend: function(obj) {
       if (!_.isString(obj)) {
@@ -158,6 +171,7 @@ define(['underscore'], function() {
     },
 
     onoffer: function(desc) {
+      desc.sdp = this.transformOutgoingSdp(desc.sdp);
       this.peer_connection.setLocalDescription(desc);
       this.wssend({
         type: 'offer',
@@ -217,18 +231,27 @@ define(['underscore'], function() {
     delete this.constructer;
 
     this.chunk_size = 800;
-    this.window_size = 30;
-    this.resend_interval = 5000;
+    this.window_size = 100;
+    this.resend_interval = 10000;
     this.block_no = 1;
     this.packet_no = 1;
     
     this.send_queue = [];
+    this.ack_queue = [];
     this.send_cache = {};
     this.block_cache = {};
   }
   PeerWithChunkSupport.prototype = _.clone(Peer.prototype);
 
   PeerWithChunkSupport.prototype.send = function(data) {
+    if (_.isObject(data)) {
+      data = JSON.stringify(data);
+    }
+    if (this.peer_connection && !this.ready) {
+      _.delay(_.bind(this.send, this), 2000, data);
+      return ;
+    }
+    data = btoa(data);
     var data_size = data.size || data.length;
     var total_packets = Math.ceil(1.0*data_size/this.chunk_size);
     for (var i=0; i<total_packets; ++i) {
@@ -237,7 +260,7 @@ define(['underscore'], function() {
                p: this.packet_no, // packet no.
                i: i,              // chunk no.
                t: total_packets,   // total no.
-               d: data});           // data
+               d: data.slice(this.chunk_size*i, this.chunk_size*(i+1))});           // data
       this.packet_no++;
     }
     this.block_no++;
@@ -245,10 +268,10 @@ define(['underscore'], function() {
   };
 
   PeerWithChunkSupport.prototype.retry_send = function(p) {
-    if (_.has(this.send_cache, p)) {
+    if (this.peer_connection && this.data_channel && _.has(this.send_cache, p)) {
+      //console.debug('send: ', _.omit(this.send_cache[p], 'd'));
       this.data_channel.send(JSON.stringify(this.send_cache[p]));
       _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
-      //console.log('send packet: '+p);
     }
   };
 
@@ -259,27 +282,42 @@ define(['underscore'], function() {
       this.retry_send(pkg.p);
     }
   };
+
+  PeerWithChunkSupport.prototype.real_send_ack = _.throttle(function(p) {
+    if (!_.isEmpty(this.ack_queue)) {
+      this.data_channel.send(JSON.stringify({ack:this.ack_queue}));
+      this.ack_queue = [];
+    }
+  }, 200);
+
+  PeerWithChunkSupport.prototype.ack = function(p) {
+    this.ack_queue.push(p);
+    this.real_send_ack();
+  };
   
   PeerWithChunkSupport.prototype.ondatachannelmessage = function(evt) {
     var msg = JSON.parse(evt.data);
-    //console.log(msg);
+    //console.debug('recv: ', _.omit(msg, 'd'));
     if (_.has(msg, 'ack')) {
-      if (this.send_cache[msg.ack]) {
-        delete this.send_cache[msg.ack];
-        this.process();
-      }
+      var This = this;
+      _.each(msg.ack, function(p) {
+        if (_.has(This.send_cache, p)) {
+          delete This.send_cache[p];
+        }
+      });
+      this.process();
     } else {
+      this.ack(msg.p);
       if (!_.has(this.block_cache, msg.b)) {
         this.block_cache[msg.b] = {};
       }
       this.block_cache[msg.b][msg.i] = msg.d;
-      console.log({ack:1,p:msg.p});
-      this.data_channel.send(JSON.stringify({ack:msg.p}));
 
       // recived all blocks
       if (msg.t == _.size(this.block_cache[msg.b])) {
         if (_.isFunction(this.onmessage)) {
-          this.onmessage(_.values(this.block_cache[msg.b]).join(''));
+          var data = atob(_.values(this.block_cache[msg.b]).join(''));
+          this.onmessage(data);
         }
         delete this.block_cache[msg.b];
       }

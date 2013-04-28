@@ -29,7 +29,7 @@ define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
       var sha1_array = [];
 
       var check_finished = _.throttle(function() {
-        var done = sha1_array.length - _.filter(sha1_array, _.isUndefined).length;
+        var done = _.filter(sha1_array, _.isString).length;
 
         if (done === total_pieces) {
           builder.result.hash = sha1.hash(sha1_array.join(''));

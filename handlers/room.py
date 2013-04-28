@@ -20,12 +20,15 @@ class ListRoomHandler(BaseHandler):
 
 class RoomHandler(BaseHandler):
     def get(self, roomid):
+        if not self.room_manager.get(roomid):
+            raise HTTPError(404)
         self.render('room/index.html', roomid = roomid)
 
 class RoomWebSocket(BaseWebSocket):
     def open(self):
         logging.debug('new socket')
         self.peerid = str(uuid.uuid4())
+        self.peer = None
         self.room = None
         self.write_message({'cmd': 'peerid', 'peerid': self.peerid})
 
@@ -48,12 +51,13 @@ class RoomWebSocket(BaseWebSocket):
 
     def cmd_new_room(self, data):
         self.room = self.room_manager.new(data['file_meta'])
-        self.room.join(self.peerid, self)
+        self.peer = self.room.join(self.peerid, self)
+        self.write_message({'cmd': 'file_meta', 'file_meta': self.room.meta})
 
     def cmd_join_room(self, data):
         self.room = self.room_manager.get(data['roomid'])
         if self.room:
-            self.room.join(self.peerid, self)
+            self.peer = self.room.join(self.peerid, self)
             self.write_message({'cmd': 'file_meta', 'file_meta': self.room.meta})
 
     def cmd_get_meta(self, data):
@@ -63,6 +67,10 @@ class RoomWebSocket(BaseWebSocket):
     def cmd_get_peer_list(self, data):
         if self.room:
             self.write_message({'cmd': 'peer_list', 'peer_list': self.room.peer_list()})
+
+    def cmd_update_bitmap(self, data):
+        if self.peer:
+            self.peer.bitmap = data['bitmap']
 
 handlers = [
         (r'/room', ListRoomHandler),

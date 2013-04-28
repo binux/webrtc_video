@@ -7,17 +7,26 @@ define(['jquery', 'p2p'], function($, p2p) {
   var client = new p2p.Client();
   client.onready = function() {
     client.join_room(window.roomid);
-    client.update_peer_list();
-    setTimeout(function() {
-      for (var key in client.peer_list) {
-        if (key == client.peerid) continue;
-        var peer = client.ensure_connection(key);
-        peer.connect();
-        peer.onready = _.bind(function() {
-          this.send('hello world from '+client.peerid);
-        }, peer);
-      }
-    }, 5000);
+    client.onfilemeta = function() {
+      client.update_peer_list();
+      client.onpeerlist = function() {
+        client.start_process();
+      };
+    };
+    client.onfinished = function() {
+      var url = client.file_entry.toURL();
+      $('#J_file').attr('href', url).text(url);
+    };
+    //client.onpeerlist = function() {
+      //for (var key in client.peer_list) {
+        //if (key == client.peerid) continue;
+        //var peer = client.ensure_connection(key);
+        //peer.connect();
+        //peer.onready = _.bind(function() {
+          //this.send('hello world from '+client.peerid);
+        //}, peer);
+      //}
+    //};
   };
 
   return {
