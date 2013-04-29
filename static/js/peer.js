@@ -240,6 +240,9 @@ define(['underscore'], function(__) {
     this.ack_queue = [];
     this.send_cache = {};
     this.block_cache = {};
+
+    this.send_in_1sec = 0;
+    this.recv_in_1sec = 0;
   }
   PeerWithChunkSupport.prototype = _.clone(Peer.prototype);
 
@@ -267,11 +270,21 @@ define(['underscore'], function(__) {
     this.process();
   };
 
+  PeerWithChunkSupport.prototype._onspeedreport = _.throttle(function() {
+    if (_.isFunction(this.onspeedreport)) {
+      this.onspeedreport({send: this.send_in_1sec, recv: this.recv_in_1sec});
+    }
+    this.send_in_1sec = 0;
+    this.recv_in_1sec = 0;
+  }, 1000);
+
   PeerWithChunkSupport.prototype.retry_send = function(p) {
     if (this.peer_connection && this.data_channel && _.has(this.send_cache, p)) {
       //console.debug('send: ', _.omit(this.send_cache[p], 'd'));
       this.data_channel.send(JSON.stringify(this.send_cache[p]));
       _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
+      this.send_in_1sec += this.send_cache[p].d.length;
+      this._onspeedreport();
     }
   };
 
@@ -283,16 +296,22 @@ define(['underscore'], function(__) {
     }
   };
 
-  PeerWithChunkSupport.prototype.real_send_ack = _.throttle(function(p) {
+  PeerWithChunkSupport.prototype.real_send_ack = function(p) {
     if (!_.isEmpty(this.ack_queue)) {
       this.data_channel.send(JSON.stringify({ack:this.ack_queue}));
       this.ack_queue = [];
     }
-  }, 200);
+  };
+
+  PeerWithChunkSupport.prototype.throttle_send_ack = _.throttle(PeerWithChunkSupport.prototype.real_send_ack, 50);
 
   PeerWithChunkSupport.prototype.ack = function(p) {
     this.ack_queue.push(p);
-    this.real_send_ack();
+    if (_.size(this.ack_queue) >= 10) {
+      this.real_send_ack();
+    } else {
+      this.throttle_send_ack();
+    }
   };
   
   PeerWithChunkSupport.prototype.ondatachannelmessage = function(evt) {
@@ -312,6 +331,8 @@ define(['underscore'], function(__) {
         this.block_cache[msg.b] = {};
       }
       this.block_cache[msg.b][msg.i] = msg.d;
+      this.recv_in_1sec += msg.d.length;
+      this._onspeedreport();
 
       // recived all blocks
       if (msg.t == _.size(this.block_cache[msg.b])) {
