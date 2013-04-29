@@ -18,13 +18,13 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
     this.ws = null;
     this.peers = {};
     this.ready = false;
-    this.min_speed_limit = 3*1024; // 3kb/s
+    this.min_speed_limit = 4*1024; // 4kb/s
 
     this.piece_queue = [];
     this.finished_piece = [];
 
     this.cur_piece = null;
-    this.request_block_per_peer = 8;
+    this.request_block_size = 1 << 19; // request up to 512K data from one peer
     this.inuse_peer = {};
     this.blocked_peer = {};
     this.finished_block = [];
@@ -146,7 +146,7 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
         return null;
       }
       if (limit === undefined) {
-        limit = this.request_block_per_peer;
+        limit = this.request_block_size / this.file_meta.block_size;
       }
 
       var i, block_cnt = Math.ceil(1.0 * this.file_meta.piece_size / this.file_meta.block_size);
@@ -288,28 +288,7 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
             }
             this.piece_queue.reverse();
 
-            var This = this;
-            var filename = this.peerid+'.'+this.file_meta.hash;
-            var create_file = function() {
-              This.file_system.root.getFile(filename,
-                                            {create: true, exclusive: true},
-                                            function(file_entry) {
-                This.file_entry = file_entry;
-                This.file_entry.createWriter(function(fw) {
-                  fw.onwriteend = function() {
-                    if (_.isFunction(This.onfilemeta)) {
-                      This.onfilemeta(This.file_meta);
-                    }
-                  };
-                  fw.write(new Blob([new ArrayBuffer(This.file_meta.size)]));
-                });
-              });
-            };
-
-            this.file_system.root.getFile(filename, {}, function(file_entry) {
-              file_entry.remove(function() { _.defer(create_file); });
-            }, create_file);
-
+            this.prealloc(this.peerid+'.'+this.file_meta.hash, this.file_meta.size, this.onfilemeta);
             break;
           case 'peer_list':
             this.peer_list = msg.peer_list;
@@ -328,10 +307,40 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
 
       if (this.peerid && this.file_system) {
         this.ready = true;
-        if (_.isFunction(this.onready)) {
+        if (_.isFunction(this.onready))
           this.onready();
-        }
       }
+    },
+
+    prealloc: function(filename, size, callback) {
+      var This = this;
+      function create_file() {
+        This.file_system.root.getFile(filename, {create: true, exclusive: true}, function(file_entry) {
+          This.file_entry = file_entry;
+          alloc(file_entry, size);
+        });
+      }
+
+      function alloc(file_entry, size) {
+        file_entry.createWriter(function(fw) {
+          fw.onwriteend = function() {
+            if (size > 0) {
+              var write_size = size > (1 << 26) ? (1 << 26) : size; /* 64M */
+              fw.write(new Blob([new ArrayBuffer(write_size)]));
+              size -= write_size;
+            } else if (_.isFunction(callback)) {
+              callback();
+            }
+          };
+          var write_size = size > (1 << 26) ? (1 << 26) : size; /* 64M */
+          fw.write(new Blob([new ArrayBuffer(write_size)]));
+          size -= write_size;
+        });
+      }
+
+      this.file_system.root.getFile(filename, {}, function(file_entry) {
+        file_entry.remove(function() { _.defer(create_file); });
+      }, create_file);
     }
   };
 
