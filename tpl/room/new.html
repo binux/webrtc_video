@@ -1,24 +1,16 @@
 {% extends ../base.html %}
 
 {% block main %}
-<section class=new-file>
-  <div id=J_box class=main-box>
-    <ul>
-      <li>filename</li>
-    </ul>
-
-    <div class=progress>
-      <div id=J_hash class=progress-bar></div>
-    </div>
-  </div>
-  <input type=file class=hidden id=J_live_video />
+<section>
+  <ul id=J_console>
+  </ul>
 </section>
 {% end %}
 
 {% block script %}
 <script>
   require(['room_new.app'], function(room) {
-    window.client = room.client;
+    window.client = room.client; // for debug
   });
 </script>
 {% end %}

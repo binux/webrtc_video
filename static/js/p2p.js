@@ -18,10 +18,15 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
 
     this.cur_piece = null;
     this.request_block_size = 1 << 19; // request up to 512K data from one peer
+    this.connect_limit = 30;
     this.inuse_peer = {};
     this.blocked_peer = {};
     this.finished_block = [];
     this.pending_block = [];
+
+    this.peer_speed = {};
+    this.sended = 0;
+    this.recved = 0;
 
     this.init();
   }
@@ -50,12 +55,36 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       this.ws.send(JSON.stringify({cmd: 'update_bitmap', bitmap: client.finished_piece.join('')}));
     },
 
+    health: function() {
+      if (!this.file_meta) {
+        return 0;
+      }
+
+      var i, tmp = [];
+      for (i=0; i<this.file_meta.piece_cnt; i++) {
+        tmp.push(0);
+      }
+
+      var This = this;
+      _.each(this.peer_list, function(value, key) {
+        for (i=0; i<This.file_meta.piece_cnt; i++) {
+          tmp[i] += (value.bitmap[i] ? 1 : 0);
+        }
+      });
+
+      var min = _.min(tmp);
+      return min*100+(_.filter(tmp, function(num) { return num > min; }).length / tmp.length);
+    },
+
     // export 
     onready: function() { console.log('onready'); },
     onfilemeta: function(file_meta) { console.log('onfilemeta', file_meta); },
     onpeerlist: function(peer_list) { console.log('onpeerlist', peer_list); },
+    onpeerconnect: function(peer) { console.log('onnewpeer', peer); },
+    onpeerdisconnect: function(peer) { console.log('onnewpeer', peer); },
     onpiece: function(piece) { console.log('onpiece', piece); },
     onfinished: function() { console.log('onfinished'); },
+    onspeedreport: function(report) { console.log('onspeedreport', report); },
 
     // private
     ensure_connection: function(peerid, connect) {
@@ -67,6 +96,9 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
           console.log('peer connect with '+peerid+' disconnected;');
           this.peers[peerid] = null;
           delete this.peers[peerid];
+          if (_.isFunction(this.onpeerdisconnect)) {
+            this.onpeerdisconnect(p);
+          }
         }, this);
         p.onmessage = _.bind(function(data) {
           var msg = JSON.parse(data);
@@ -84,11 +116,14 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
               break;
           } 
         }, this);
-        p.onspeedreport = function(a) { console.log(a); };
+        p.onspeedreport = _.bind(function(report) { this.speed_report(p, report); }, this);
         if (connect) {
           p.connect();
         }
         this.peers[peerid] = p;
+        if (_.isFunction(this.onpeerconnect)) {
+          this.onpeerconnect(p);
+        }
         return p;
       }
     },
@@ -130,6 +165,25 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       }
     },
 
+    speed_report: function(peer, report) {
+      this.peer_speed[peer.id] = report;
+      this.sended += report.send;
+      this.recved += report.recv;
+      this._reset_speed();
+    },
+    _reset_speed: _.throttle(function() {
+      var send = 0, recv = 0;
+      for (var k in this.peer_speed) {
+        send += this.peer_speed[k].send;
+        recv += this.peer_speed[k].recv;
+      }
+      if (_.isFunction(this.onspeedreport)) {
+        this.onspeedreport({send: send, recv: recv});
+      }
+      this.peer_speed = {};
+      this._reset_speed();
+    }, 1000),
+
     pickup_block: function(limit) {
       if (_.isEmpty(this.piece_queue) && this.cur_piece === null) {
         return null;
@@ -149,18 +203,19 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       }
 
       // piece finished
-      if (this.cur_piece !== null && _.every(this.finished_block, _.identity)) {
+      if (this.cur_piece !== null && _.all(this.finished_block)) {
         var blob = new Blob(this.block_chunks);
         var This = this;
         this.file.write(blob, this.file_meta.piece_size * this.cur_piece, function() {
+          This.finished_piece[This.cur_piece] = 1;
           if (_.isFunction(This.onpiece)) {
             This.onpiece(This.cur_piece);
           }
-          This.finished_piece[This.cur_piece] = 1;
           This.cur_piece = null;
+          _.defer(_.bind(This.update_bitmap, This));
 
           // check all finished
-          if (_.every(This.finished_piece, _.identity) && _.isEmpty(This.piece_queue)) {
+          if (_.all(This.finished_piece) && _.isEmpty(This.piece_queue)) {
             if (_.isFunction(This.onfinished)) {
               This.onfinished();
             }
@@ -199,19 +254,24 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     },
 
     start_process: _.throttle(function() {
+      while (_.size(this.inuse_peer) < this.connect_limit && this._start_progress()) {
+      }
+    }, 200),
+
+    _start_progress: function() {
       // pickup block
       var blocks = this.pickup_block();
       if (blocks === null) {
-        console.debug('no block to go.');
-        return ;
+        //console.debug('no block to go.');
+        return false;
       }
       var piece = blocks[0]; blocks = blocks[1];
 
       // find available peer
       var best_peer = this.find_available_peer(piece);
       if (best_peer === null) {
-        console.debug('no peer has the piece.');
-        return ;
+        //console.debug('no peer has the piece.');
+        return false;
       }
       var peer = this.ensure_connection(best_peer, true);
 
@@ -235,7 +295,9 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
           }
         }
       }, This.file_meta.block_size / This.min_speed_limit * 1000);
-    }, 100),
+
+      return true;
+    },
 
     onblock_finished: function(piece, block) {
       //console.debug('recv_block: '+piece+','+block);

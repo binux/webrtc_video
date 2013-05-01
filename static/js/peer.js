@@ -242,7 +242,9 @@ define(['underscore'], function(__) {
     this.block_cache = {};
 
     this.send_in_1sec = 0;
+    this.sended = 0;
     this.recv_in_1sec = 0;
+    this.recved = 0;
   }
   PeerWithChunkSupport.prototype = _.clone(Peer.prototype);
 
@@ -276,6 +278,7 @@ define(['underscore'], function(__) {
     }
     this.send_in_1sec = 0;
     this.recv_in_1sec = 0;
+    this._onspeedreport();
   }, 1000);
 
   PeerWithChunkSupport.prototype.retry_send = function(p) {
@@ -284,6 +287,7 @@ define(['underscore'], function(__) {
       this.data_channel.send(JSON.stringify(this.send_cache[p]));
       _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
       this.send_in_1sec += this.send_cache[p].d.length;
+      this.sended += this.send_cache[p].d.length;
       this._onspeedreport();
     }
   };
@@ -332,6 +336,7 @@ define(['underscore'], function(__) {
       }
       this.block_cache[msg.b][msg.i] = msg.d;
       this.recv_in_1sec += msg.d.length;
+      this.recved += msg.d.length;
       this._onspeedreport();
 
       // recived all blocks

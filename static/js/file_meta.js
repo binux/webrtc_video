@@ -31,6 +31,10 @@ define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
       var check_finished = _.throttle(function() {
         var done = _.filter(sha1_array, _.isString).length;
 
+        if (_.isFunction(builder.onprogress)) {
+          builder.onprogress({done: done, total: total_pieces});
+        }
+
         if (done === total_pieces) {
           builder.result.hash = sha1.hash(sha1_array.join(''));
           builder.result.sha1_array = sha1_array;
@@ -38,10 +42,6 @@ define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
             builder.onload_once = true;
             builder.onload(builder.result);
           }
-        }
-
-        if (_.isFunction(builder.onprogress)) {
-          builder.onprogress({done: done, total: total_pieces});
         }
       }, 100);
 

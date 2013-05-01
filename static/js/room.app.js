@@ -3,30 +3,63 @@
 //         http://binux.me
 // Created on 2013-04-24 15:11:35
 
-define(['jquery', 'p2p'], function($, p2p) {
+define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
+  var J_console = $('#J_console');
   var client = new p2p.Client();
+  J_console.append('<li>websocket connecting...');
+
   client.onready = function() {
+    J_console.append('<li>connected. get peerid: '+client.peerid);
+    J_console.append('<li>getting file meta...');
     client.join_room(window.roomid);
-    client.onfilemeta = function() {
+    client.onfilemeta = function(file_meta) {
+      J_console.append('<li>file: '+file_meta.filename+
+                          ' size: '+utils.format_size(file_meta.size)+
+                          ' ('+file_meta.type+')');
+      J_console.append('<li><dl class=info>'+
+                        '<dt>progress</dt> <dd id=J_progress>0%</dd>'+
+                        '<dt>health</dt> <dd id=J_health>0%</dd>'+
+                        '<dt>peers</dt> <dd id=J_peers>1</dd>'+
+                        '<dt>connected</dt> <dd id=J_conn>0</dd>'+
+                        '<dt>upload</dt> <dd id=J_ups>0B/s</dd> <dd id=J_up>0B</dd>'+
+                        '<dt>download</dt> <dd id=J_dls>0B/s</dd> <dd id=J_dl>0B</dd>'+
+                       '</dl> <button id=J_refresh_peer_list>refresh</button>');
+      $('#J_refresh_peer_list').on('click', function() {
+        _.bind(client.update_peer_list, client)();
+      });
       client.update_peer_list();
-      client.onpeerlist = function() {
-        client.start_process();
-      };
+      setInterval(_.bind(client.update_peer_list, client), 60*1000); // 1min
     };
+
+    client.onpeerlist = function(peer_list) {
+      $('#J_health').text(''+client.health()+'%');
+      $('#J_peers').text(_.size(peer_list));
+      client.start_process();
+    };
+
+    client.onpeerconnect = function(peer) {
+      $('#J_conn').text(_.size(client.peers));
+    };
+
+    client.onpeerdisconnect = function(peer) {
+      $('#J_conn').text(_.size(client.peers));
+    };
+
+    client.onspeedreport = function(report) {
+      $('#J_ups').text(utils.format_size(report.send)+'/s');
+      $('#J_dls').text(utils.format_size(report.recv)+'/s');
+      $('#J_up').text(utils.format_size(client.sended));
+      $('#J_dl').text(utils.format_size(client.recved));
+    };
+
+    client.onpiece = function(piece) {
+      $('#J_progress').text(''+(_.filter(client.finished_piece, _.identity).length / client.finished_piece.length * 100).toFixed(2)+'%');
+    };
+
     client.onfinished = function() {
-      var url = client.file.toURL();
-      $('#J_file').attr('href', url).attr('download', client.file_meta.filename).text(client.file_meta.filename);
+      J_console.append('<li>download completed: <a href="'+client.file.toURL()+
+                       '" download="'+client.file_meta.filename+'">'+client.file_meta.filename+'</a>');
     };
-    //client.onpeerlist = function() {
-      //for (var key in client.peer_list) {
-        //if (key == client.peerid) continue;
-        //var peer = client.ensure_connection(key);
-        //peer.connect();
-        //peer.onready = _.bind(function() {
-          //this.send('hello world from '+client.peerid);
-        //}, peer);
-      //}
-    //};
   };
 
   return {

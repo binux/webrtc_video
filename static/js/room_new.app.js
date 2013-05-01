@@ -3,37 +3,73 @@
 //         http://binux.me
 // Created on 2013-04-22 15:05:56
 
-define(['jquery', 'file_meta', 'p2p'], function($, file_meta, p2p) {
+define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_meta, p2p, utils) {
+  var J_console = $('#J_console');
   var client = new p2p.Client();
-  $('#J_live_video').on('change', function(evt) {
-    $('#J_box').unbind();
-    $('#J_hash').width(0+'%');
-    var file = evt.target.files[0];
-    var builder = file_meta.build(file);
-    builder.onload = function(result) {
-      console.log(result);
-      if (client.ready) {
+  J_console.append('<li>websocket connecting...');
+
+  client.onready = function() {
+    J_console.append('<li>connected. get peerid: '+client.peerid);
+    J_console.append('<li>select a file to share: <input type=file id=J_file />');
+    $('#J_file').on('change', function(evt) {
+      $('#J_file').attr('disabled', true);
+      var file = evt.target.files[0];
+      J_console.append('size: '+utils.format_size(file.size)+' ('+file.type+')');
+      var builder = file_meta.build(file);
+      builder.onload = function(result) {
+        $('#J_hash').text(result.hash);
+        J_console.append('<li>sending file meta...');
         client.new_room(result);
-      } else {
-        client.onready = function() {
-          client.new_room(result);
-        };
-      }
+      };
+      builder.onprogress = function(data) {
+        $('#J_hash').text(''+(data.done/data.total*100)+'%');
+      };
+      J_console.append('<li>calculating sha1 hash: <span id=J_hash>0%</span>');
+
       client.onfilemeta = function(file_meta) {
         client.file.write(file, 0, function(evt) {
           client.piece_queue = [];
           client.finished_piece = _.map(client.finished_piece, function() { return 1; });
           client.update_bitmap();
+          J_console.append('<li>room created: <a href="/room/'+file_meta.hash+'" target=_blank>'+
+                           location.href.replace(/room\/new.*$/i, 'room/'+file_meta.hash)+'</a>');
+          J_console.append('<li><dl class=info>'+
+                            '<dt>health</dt> <dd id=J_health>100%</dd>'+
+                            '<dt>peers</dt> <dd id=J_peers>1</dd>'+
+                            '<dt>connected</dt> <dd id=J_conn>0</dd>'+
+                            '<dt>upload</dt> <dd id=J_ups>0B/s</dd> <dd id=J_up>0B</dd>'+
+                            '<dt>download</dt> <dd id=J_dls>0B/s</dd> <dd id=J_dl>0B</dd>'+
+                           '</dl> <button id=J_refresh_peer_list>refresh</button>');
+
+          $('#J_refresh_peer_list').on('click', function() {
+            _.bind(client.update_peer_list, client)();
+          });
+          client.update_peer_list();
+          setInterval(_.bind(client.update_peer_list, client), 60*1000); // 1min
         });
       };
-    };
-    builder.onprogress = function(data) {
-      $('#J_hash').width(data.done/data.total*100+'%');
-    };
-  });
-  $('#J_box').on('click', function() {
-    $('#J_live_video').click();
-  });
+    });
+  };
+
+  client.onpeerlist = function(peer_list) {
+    $('#J_health').text(''+client.health()+'%');
+    $('#J_peers').text(_.size(peer_list));
+  };
+
+  client.onpeerconnect = function(peer) {
+    $('#J_conn').text(_.size(client.peers));
+  };
+
+  client.onpeerdisconnect = function(peer) {
+    $('#J_conn').text(_.size(client.peers));
+  };
+
+  client.onspeedreport = function(report) {
+    $('#J_ups').text(utils.format_size(report.send)+'/s');
+    $('#J_dls').text(utils.format_size(report.recv)+'/s');
+    $('#J_up').text(utils.format_size(client.sended));
+    $('#J_dl').text(utils.format_size(client.recved));
+  };
 
   return {
     client: client

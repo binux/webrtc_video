@@ -12,17 +12,12 @@ class RoomManager(object):
     def new(self, meta):
         if meta['hash'] in self.rooms:
             if self.rooms[meta['hash']].sha1_array == meta['sha1_array']:
-                # same file
-                pass
                 return self.rooms[meta['hash']]
             else:
                 return None
-
-        try:
+        else:
             self.rooms[meta['hash']] = Room(meta)
-        except KeyError, e:
-            return None
-        return self.rooms[meta['hash']]
+            return self.rooms[meta['hash']]
 
     def get(self, roomid):
         return self.rooms.get(roomid)
