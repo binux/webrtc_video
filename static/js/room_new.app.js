@@ -22,7 +22,7 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
         client.new_room(result);
       };
       builder.onprogress = function(data) {
-        $('#J_hash').text(''+(data.done/data.total*100)+'%');
+        $('#J_hash').text(''+(data.done/data.total*100).toFixed(2)+'%');
       };
       J_console.append('<li>calculating sha1 hash: <span id=J_hash>0%</span>');
 
@@ -52,7 +52,7 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
   };
 
   client.onpeerlist = function(peer_list) {
-    $('#J_health').text(''+client.health()+'%');
+    $('#J_health').text(''+(client.health()*100).toFixed()+'%');
     $('#J_peers').text(_.size(peer_list));
   };
 

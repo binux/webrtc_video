@@ -32,7 +32,7 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
     };
 
     client.onpeerlist = function(peer_list) {
-      $('#J_health').text(''+client.health()+'%');
+      $('#J_health').text(''+(client.health()*100).toFixed(2)+'%');
       $('#J_peers').text(_.size(peer_list));
       client.start_process();
     };
@@ -52,8 +52,34 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
       $('#J_dl').text(utils.format_size(client.recved));
     };
 
+    var create_video = _.once(function(url) {
+      J_console.append('<li><video id=J_video>video not supported</video>');
+      var video = $('#J_video').get(0);
+      var on_error_time = 0;
+      video.src = url;
+      video.preload = 'metadata';
+      video.autoplay = true;
+      video.controls = false;
+      video.addEventListener('canplay', function() {
+        if (on_error_time) {
+          video.currentTime = on_error_time;
+          video.play();
+        }
+      });
+      video.addEventListener('error', function() {
+        on_error_time = Math.max(0, video.currentTime);
+        setTimeout(function() {
+          video.load();
+        }, 5000);
+      });
+    });
+
     client.onpiece = function(piece) {
       $('#J_progress').text(''+(_.filter(client.finished_piece, _.identity).length / client.finished_piece.length * 100).toFixed(2)+'%');
+
+      if (piece === 0 && 'video/ogg,video/mp4'.indexOf(client.file_meta.type) != -1) {
+        create_video(client.file.toURL());
+      }
     };
 
     client.onfinished = function() {

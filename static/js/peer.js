@@ -28,6 +28,8 @@ define(['underscore'], function(__) {
     this.peer_connection = null;
     this.data_channel = null;
 
+    this.connect_timeout = 20*1000;
+
     if (Browser == 'moz') {
       this.pc_config = {
         iceServers: [{url: "stun:23.21.150.121"}]
@@ -73,6 +75,12 @@ define(['underscore'], function(__) {
           this.peerConnection.addStream(vs);
         });
       }
+
+      _.delay(_.bind(function() {
+        if (!this.ready) {
+          this.close();
+        }
+      }, this), this.connect_timeout);
     },
 
     connect: function(label) {
@@ -121,7 +129,8 @@ define(['underscore'], function(__) {
       this.closed = true;
 
       if (_.isFunction(this.onclose)) {
-        this.onclose();
+        this.onceonclose = this.onceonclose || _.once(this.onclose);
+        this.onceonclose();
       }
     },
 

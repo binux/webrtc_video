@@ -11,13 +11,12 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     this.ws = null;
     this.peers = {};
     this.ready = false;
-    this.min_speed_limit = 4*1024; // 4kb/s
+    this.min_speed_limit = 8*1024; // 8kb/s
 
     this.piece_queue = [];
     this.finished_piece = [];
 
     this.cur_piece = null;
-    this.request_block_size = 1 << 19; // request up to 512K data from one peer
     this.connect_limit = 30;
     this.inuse_peer = {};
     this.blocked_peer = {};
@@ -68,12 +67,12 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       var This = this;
       _.each(this.peer_list, function(value, key) {
         for (i=0; i<This.file_meta.piece_cnt; i++) {
-          tmp[i] += (value.bitmap[i] ? 1 : 0);
+          tmp[i] += (value.bitmap[i] == '1' ? 1 : 0);
         }
       });
 
       var min = _.min(tmp);
-      return min*100+(_.filter(tmp, function(num) { return num > min; }).length / tmp.length);
+      return min+(_.filter(tmp, function(num) { return num > min; }).length / tmp.length);
     },
 
     // export 
@@ -94,7 +93,6 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
         var p = new peer.Peer(this.ws, this.peerid, peerid);
         p.onclose = _.bind(function() {
           console.log('peer connect with '+peerid+' disconnected;');
-          this.peers[peerid] = null;
           delete this.peers[peerid];
           if (_.isFunction(this.onpeerdisconnect)) {
             this.onpeerdisconnect(p);
@@ -229,7 +227,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
 
       // pick up
       result = [];
-      limit = limit || this.request_block_size / this.file_meta.block_size;
+      limit = limit || 1;
       for (i=0; i<block_cnt; ++i) {
         if (this.finished_block[i] || this.pending_block[i])
           continue;
