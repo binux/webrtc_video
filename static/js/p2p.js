@@ -3,18 +3,11 @@
 //         http://binux.me
 // Created on 2013-04-22 17:20:48
 
-define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
-  var requestFileSystem;
-  if (window.webkitRequestFileSystem) {
-    requestFileSystem = window.webkitRequestFileSystem;
-  } else {
-  }
-
+define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, FileSystem) {
   function Client() {
     this.peerid = null;
     this.file_meta = null;
-    this.file_system = null;
-    this.file_entry = null;
+    this.file = null;
     this.ws = null;
     this.peers = {};
     this.ready = false;
@@ -39,8 +32,6 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
         (location.protocol == 'https:' ? 'wss://' : 'ws://')+location.host+'/room/ws');
       this.ws.onopen = _.bind(this.onwsopen, this);
       this.ws.onmessage = _.bind(this.onwsmessage, this);
-
-      requestFileSystem(window.TEMPORARY, 5*1024*1024*1024 /* 5G */, _.bind(this.oninitfs, this));
     },
 
     new_room: function(file_meta, callback) {
@@ -104,24 +95,22 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
 
     send_block: function(peer, piece, block) {
       //console.log('sending block '+piece+','+block);
-      if (!this.file_entry) return;
+      if (!this.file) return;
       if (this.finished_piece[piece] != 1) return;
-      var This = this;
-      this.file_entry.file(function(file) {
-        var start = This.file_meta.piece_size*piece + This.file_meta.block_size*block;
-        var blob = file.slice(start, start+This.file_meta.block_size);
-        var reader = new FileReader();
-        reader.onload = function(evt) {
-          var data = {cmd: 'block',
-            piece: piece,
-            block: block,
-            data: evt.target.result
-            //sha1: sha1.hash(evt.target.result),
-          };
-          peer.send(data);
-        };
-        reader.readAsBinaryString(blob);
+
+      var start = this.file_meta.piece_size*piece + this.file_meta.block_size*block;
+      this.file.readAsBinaryString(start, start+this.file_meta.block_size, function(data) {
+        peer.send({
+          cmd: 'block',
+          piece: piece,
+          block: block,
+          data: data
+        });
       });
+    },
+
+    request_block: function(peer, piece, blocks) {
+      peer.send({cmd: 'request_block', piece: piece, blocks: blocks});
     },
 
     recv_block: function(peer, piece, block, data) {
@@ -145,10 +134,8 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
       if (_.isEmpty(this.piece_queue) && this.cur_piece === null) {
         return null;
       }
-      if (limit === undefined) {
-        limit = this.request_block_size / this.file_meta.block_size;
-      }
 
+      // choice a piece
       var i, block_cnt = Math.ceil(1.0 * this.file_meta.piece_size / this.file_meta.block_size);
       if (this.cur_piece === null) {
         this.cur_piece = this.piece_queue.pop();
@@ -161,25 +148,33 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
         }
       }
 
-      if (_.every(this.finished_block, _.identity)) {
-        // piece finished
+      // piece finished
+      if (this.cur_piece !== null && _.every(this.finished_block, _.identity)) {
         var blob = new Blob(this.block_chunks);
         var This = this;
-        this.write(blob, function() {
+        this.file.write(blob, this.file_meta.piece_size * this.cur_piece, function() {
           if (_.isFunction(This.onpiece)) {
             This.onpiece(This.cur_piece);
           }
           This.finished_piece[This.cur_piece] = 1;
           This.cur_piece = null;
-          _.defer(_.bind(This.start_process, This));
-          if (_.every(This.finished_piece, _.identity) && _.isFunction(This.onfinished)) {
-            This.onfinished();
+
+          // check all finished
+          if (_.every(This.finished_piece, _.identity) && _.isEmpty(This.piece_queue)) {
+            if (_.isFunction(This.onfinished)) {
+              This.onfinished();
+            }
+          } else {
+            _.defer(_.bind(This.start_process, This));
           }
-        }, this.file_meta.piece_size*this.cur_piece);
+        });
         return null;
       }
 
+
+      // pick up
       result = [];
+      limit = limit || this.request_block_size / this.file_meta.block_size;
       for (i=0; i<block_cnt; ++i) {
         if (this.finished_block[i] || this.pending_block[i])
           continue;
@@ -196,7 +191,7 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
     find_available_peer: function(piece) {
       for (var key in this.peer_list) {
         if (key == this.peerid) continue;
-        if (this.peer_list[key]['bitmap'][piece] && !_.has(this.inuse_peer, key) && !_.has(this.blocked_peer, key)) {
+        if (this.peer_list[key].bitmap[piece] && !_.has(this.inuse_peer, key) && !_.has(this.blocked_peer, key)) {
           return key;
         }
       }
@@ -204,25 +199,31 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
     },
 
     start_process: _.throttle(function() {
+      // pickup block
       var blocks = this.pickup_block();
       if (blocks === null) {
         console.debug('no block to go.');
         return ;
       }
       var piece = blocks[0]; blocks = blocks[1];
+
+      // find available peer
       var best_peer = this.find_available_peer(piece);
       if (best_peer === null) {
         console.debug('no peer has the piece.');
         return ;
       }
       var peer = this.ensure_connection(best_peer, true);
+
+      // mark
       this.inuse_peer[best_peer] = 1;
       for (var i=0; i<blocks.length; i++) {
         this.pending_block[blocks[i]] = best_peer;
       }
       //console.debug('request_block: '+piece+','+blocks);
-      peer.send({cmd: 'request_block', piece: piece, blocks: blocks});
+      this.request_block(peer, piece, blocks);
 
+      // set timeout for blocks
       var This = this;
       _.delay(function() {
         for (var i=0; i<blocks.length; i++) {
@@ -235,23 +236,6 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
         }
       }, This.file_meta.block_size / This.min_speed_limit * 1000);
     }, 100),
-
-    write: function(block, callback, offset) {
-      if (!this.file_entry) {
-        throw 'file entry is not setted';
-      }
-      offset = offset || 0;
-      this.file_entry.createWriter(function(fw) {
-        if (!block.size) {
-          block = new Blob([block]);
-        }
-        fw.seek(offset);
-        fw.write(block);
-        if (_.isFunction(callback)) {
-          fw.onwriteend = callback;
-        }
-      });
-    },
 
     onblock_finished: function(piece, block) {
       //console.debug('recv_block: '+piece+','+block);
@@ -271,11 +255,9 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
         switch (msg.cmd) {
           case 'peerid':
             this.peerid = msg.peerid;
-            if (this.peerid && this.file_system) {
-              this.ready = true;
-              if (_.isFunction(this.onready)) {
-                this.onready();
-              }
+            this.ready = true;
+            if (_.isFunction(this.onready)) {
+              this.onready();
             }
             break;
           case 'file_meta':
@@ -288,7 +270,12 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
             }
             this.piece_queue.reverse();
 
-            this.prealloc(this.peerid+'.'+this.file_meta.hash, this.file_meta.size, this.onfilemeta);
+            var This = this;
+            this.file = new FileSystem.File(this.file_meta.size, function() {
+              if (_.isFunction(This.onfilemeta)) {
+                This.onfilemeta(This.file_meta);
+              }
+            });
             break;
           case 'peer_list':
             this.peer_list = msg.peer_list;
@@ -300,47 +287,6 @@ define(['underscore', 'peer', 'lib/sha1.min'], function(__, peer, ___) {
             break;
         }
       }
-    },
-
-    oninitfs: function(fs) {
-      this.file_system = fs;
-
-      if (this.peerid && this.file_system) {
-        this.ready = true;
-        if (_.isFunction(this.onready))
-          this.onready();
-      }
-    },
-
-    prealloc: function(filename, size, callback) {
-      var This = this;
-      function create_file() {
-        This.file_system.root.getFile(filename, {create: true, exclusive: true}, function(file_entry) {
-          This.file_entry = file_entry;
-          alloc(file_entry, size);
-        });
-      }
-
-      function alloc(file_entry, size) {
-        file_entry.createWriter(function(fw) {
-          fw.onwriteend = function() {
-            if (size > 0) {
-              var write_size = size > (1 << 26) ? (1 << 26) : size; /* 64M */
-              fw.write(new Blob([new ArrayBuffer(write_size)]));
-              size -= write_size;
-            } else if (_.isFunction(callback)) {
-              callback();
-            }
-          };
-          var write_size = size > (1 << 26) ? (1 << 26) : size; /* 64M */
-          fw.write(new Blob([new ArrayBuffer(write_size)]));
-          size -= write_size;
-        });
-      }
-
-      this.file_system.root.getFile(filename, {}, function(file_entry) {
-        file_entry.remove(function() { _.defer(create_file); });
-      }, create_file);
     }
   };
 

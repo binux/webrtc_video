@@ -20,7 +20,7 @@ define(['jquery', 'file_meta', 'p2p'], function($, file_meta, p2p) {
         };
       }
       client.onfilemeta = function(file_meta) {
-        client.write(file, function(evt) {
+        client.file.write(file, 0, function(evt) {
           client.piece_queue = [];
           client.finished_piece = _.map(client.finished_piece, function() { return 1; });
           client.update_bitmap();

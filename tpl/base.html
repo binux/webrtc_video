@@ -25,8 +25,8 @@
         {% if options.debug %}urlArgs: "bust=" + (new Date()).getTime(),{% end %}
         baseUrl: '/static/js',
         paths: {
-          jquery: '//cdnjs.cloudflare.com/ajax/libs/jquery/1.9.1/jquery.min',
-          underscore: '//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.4.4/underscore-min'
+          jquery: 'http://lib.sinaapp.com/js/jquery/1.9.1/jquery-1.9.1.min',
+          underscore: 'http://lib.sinaapp.com/js/underscore/1.4.4/underscore-min'
         }
       });
       window.console = window.console || {log: function(){}, debug: function(){}};

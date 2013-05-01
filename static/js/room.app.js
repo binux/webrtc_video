@@ -14,8 +14,8 @@ define(['jquery', 'p2p'], function($, p2p) {
       };
     };
     client.onfinished = function() {
-      var url = client.file_entry.toURL();
-      $('#J_file').attr('href', url).text(url);
+      var url = client.file.toURL();
+      $('#J_file').attr('href', url).attr('download', client.file_meta.filename).text(client.file_meta.filename);
     };
     //client.onpeerlist = function() {
       //for (var key in client.peer_list) {
