@@ -13,15 +13,17 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     this.ready = false;
     this.min_speed_limit = 8*1024; // 8kb/s
 
-    this.piece_queue = [];
-    this.finished_piece = [];
-
-    this.cur_piece = null;
+    this.block_per_connect = 4;
     this.connect_limit = 30;
     this.inuse_peer = {};
+    this.bad_peer = {};
     this.blocked_peer = {};
-    this.finished_block = [];
-    this.pending_block = [];
+
+    this.piece_queue = [];
+    this.finished_piece = [];
+    this.finished_block = {};
+    this.pending_block = {};
+    this.block_chunks = {};
 
     this.peer_speed = {};
     this.sended = 0;
@@ -91,6 +93,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
         return this.peers[peerid];
       } else {
         var p = new peer.Peer(this.ws, this.peerid, peerid);
+        this.inuse_peer[peerid] = 0;
         p.onclose = _.bind(function() {
           console.log('peer connect with '+peerid+' disconnected;');
           delete this.peers[peerid];
@@ -103,9 +106,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
           //console.log('FROM:'+p.target+': '+(msg.cmd||msg));
           switch (msg.cmd) {
             case 'request_block':
-              for (var i=0; i<msg.blocks.length; i++) {
-                this.send_block(p, msg.piece, msg.blocks[i]);
-              }
+              this.send_block(p, msg.piece, msg.block);
               break;
             case 'block':
               this.recv_block(p, msg.piece, msg.block, msg.data);
@@ -142,23 +143,25 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       });
     },
 
-    request_block: function(peer, piece, blocks) {
-      peer.send({cmd: 'request_block', piece: piece, blocks: blocks});
+    request_block: function(peer, piece, block) {
+      //console.debug('request_block: '+peer.target+', '+piece+', '+block);
+      peer.send({cmd: 'request_block', piece: piece, block: block});
     },
 
     recv_block: function(peer, piece, block, data) {
       //console.log('recv block '+piece+','+block);
-      if (piece == this.cur_piece && this.pending_block[block] == peer.target) {
-        this.pending_block[block] = 0;
-        this.finished_block[block] = 1;
-        if (!_.contains(this.pending_block, peer.target) && _.has(this.inuse_peer, peer.target))
-          delete this.inuse_peer[peer.target];
+      if (this.finished_block[piece] && this.finished_block[piece][block] != 1) {
+        if (this.pending_block[piece][block]) {
+          this.inuse_peer[this.pending_block[piece][block]] -= 1;
+          this.pending_block[piece][block] = 0;
+        }
+        this.finished_block[piece][block] = 1;
         // save as binnary data
         var binarray = new Uint8Array(data.length);
         for (var i=0;i<data.length;i++) {
           binarray[i] = data.charCodeAt(i) & 0xff;
         }
-        this.block_chunks[block] = binarray;
+        this.block_chunks[piece][block] = binarray;
         this.onblock_finished(piece, block);
       }
     },
@@ -182,124 +185,145 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       this._reset_speed();
     }, 1000),
 
-    pickup_block: function(limit) {
-      if (_.isEmpty(this.piece_queue) && this.cur_piece === null) {
+    pickup_block: function() {
+      if (_.isEmpty(this.piece_queue)) {
         return null;
       }
 
       // choice a piece
-      var i, block_cnt = Math.ceil(1.0 * this.file_meta.piece_size / this.file_meta.block_size);
-      if (this.cur_piece === null) {
-        this.cur_piece = this.piece_queue.pop();
-        this.block_chunks = [];
-        this.finished_block = [];
-        this.pending_block = [];
-        for (i=0; i<block_cnt; ++i) {
-          this.finished_block[i] = 0;
-          this.pending_block[i] = 0;
+      var i, j, block_cnt = Math.ceil(1.0 * this.file_meta.piece_size / this.file_meta.block_size);
+
+      for (i=0; i<this.piece_queue.length; i++) {
+        var piece = this.piece_queue[i];
+
+        // init if it's a new piece
+        if (this.block_chunks[piece] === undefined) {
+          this.block_chunks[piece] = [];
+          this.finished_block[piece] = [];
+          this.pending_block[piece] = [];
+          for (i=0; i<block_cnt; ++i) {
+            this.finished_block[piece][i] = 0;
+            this.pending_block[piece][i] = 0;
+          }
         }
-      }
 
-      // piece finished
-      if (this.cur_piece !== null && _.all(this.finished_block)) {
-        var blob = new Blob(this.block_chunks);
-        var This = this;
-        this.file.write(blob, this.file_meta.piece_size * this.cur_piece, function() {
-          This.finished_piece[This.cur_piece] = 1;
-          if (_.isFunction(This.onpiece)) {
-            This.onpiece(This.cur_piece);
-          }
-          This.cur_piece = null;
-          _.defer(_.bind(This.update_bitmap, This));
-
-          // check all finished
-          if (_.all(This.finished_piece) && _.isEmpty(This.piece_queue)) {
-            if (_.isFunction(This.onfinished)) {
-              This.onfinished();
-            }
-          } else {
-            _.defer(_.bind(This.start_process, This));
-          }
-        });
-        return null;
-      }
-
-
-      // pick up
-      result = [];
-      limit = limit || 1;
-      for (i=0; i<block_cnt; ++i) {
-        if (this.finished_block[i] || this.pending_block[i])
-          continue;
-        result.push(i);
-        if (result.length >= limit)
-          break;
-      }
-      if (result.length > 0) {
-        return [this.cur_piece, result];
+        // pick up block
+        for (j=0; j<block_cnt; ++j) {
+          if (this.finished_block[piece][j] || this.pending_block[piece][j])
+            continue;
+          return [piece, j];
+        }
       }
       return null;
     },
 
     find_available_peer: function(piece) {
+      var peers = [];
       for (var key in this.peer_list) {
-        if (key == this.peerid) continue;
-        if (this.peer_list[key].bitmap[piece] && !_.has(this.inuse_peer, key) && !_.has(this.blocked_peer, key)) {
-          return key;
+        if (this.peer_list[key].bitmap[piece] &&
+            (!_.has(this.inuse_peer, key) || this.inuse_peer[key] < this.block_per_connect) &&
+            !this.blocked_peer[key]) {
+          peers.push(key);
         }
       }
-      return null;
+      if (peers.length === 0) {
+        return null;
+      } else if (peers.length == 1) {
+        return peers[0];
+      }
+
+      var This = this;
+      var peers_score = _.map(peers, function(key) {
+        return (This.bad_peer[key] || 0) * 1000 +
+          (This.peers[key] ? 0 : 1) * 100 +
+          (This.inuse_peer[key] || 0) * 10;
+      });
+      var tmp = [];
+      var min_score = _.min(peers_score);
+      for (var i=0; i<peers.length; i++) {
+        if (peers_score[i] == min_score) {
+          tmp.push(peers[i]);
+        }
+      }
+
+      return tmp[_.random(tmp.length-1)];
     },
 
     start_process: _.throttle(function() {
       while (_.size(this.inuse_peer) < this.connect_limit && this._start_progress()) {
       }
-    }, 200),
+    }, 100),
 
     _start_progress: function() {
       // pickup block
-      var blocks = this.pickup_block();
-      if (blocks === null) {
-        //console.debug('no block to go.');
+      var piece_block = this.pickup_block();
+      if (piece_block === null) {
+        //console.log('no block to go.');
         return false;
       }
-      var piece = blocks[0]; blocks = blocks[1];
+      var piece = piece_block[0]; block = piece_block[1];
 
       // find available peer
       var best_peer = this.find_available_peer(piece);
       if (best_peer === null) {
-        //console.debug('no peer has the piece.');
+        //console.log('no peer has the piece.');
         return false;
       }
       var peer = this.ensure_connection(best_peer, true);
 
       // mark
-      this.inuse_peer[best_peer] = 1;
-      for (var i=0; i<blocks.length; i++) {
-        this.pending_block[blocks[i]] = best_peer;
-      }
-      //console.debug('request_block: '+piece+','+blocks);
-      this.request_block(peer, piece, blocks);
+      this.inuse_peer[best_peer] += 1;
+      this.pending_block[piece][block] = best_peer;
+      this.request_block(peer, piece, block);
 
-      // set timeout for blocks
-      var This = this;
-      _.delay(function() {
-        for (var i=0; i<blocks.length; i++) {
-          if (This.cur_piece == piece && This.pending_block[blocks[i]] == best_peer) {
-            This.pending_block[blocks[i]] = 0;
-            if (_.has(This.inuse_peer, best_peer))
-              delete This.inuse_peer[best_peer];
-            _.defer(_.bind(This.start_process, This));
-          }
-        }
-      }, This.file_meta.block_size / This.min_speed_limit * 1000);
+      // set timeout for block, abandon all pending block when one is timeout
+      _.delay(_.bind(this.check_pending, this, best_peer, piece, block),
+              this.file_meta.block_size / this.min_speed_limit * 1000);
 
       return true;
     },
 
+    check_pending: function(key, piece, block) {
+      if (this.pending_block[piece] && this.pending_block[piece][block] == key) {
+        console.log('block '+piece+', '+block+' from '+key+' timeout.');
+        for (var p in this.pending_block) {
+          for (var b=0; b<this.pending_block[p].length; b++) {
+            if (this.pending_block[p][b] == key) {
+              this.inuse_peer[key] -= 1;
+              this.pending_block[p][b] = 0;
+              this.bad_peer[key] = this.bad_peer[key] || 0;
+              this.bad_peer[key] += 1;
+            }
+          }
+        }
+        _.defer(_.bind(this.start_process, this));
+      }
+    },
+
     onblock_finished: function(piece, block) {
-      //console.debug('recv_block: '+piece+','+block);
-      this.start_process();
+      // piece finished
+      if (_.all(this.finished_block[piece])) {
+        var blob = new Blob(this.block_chunks[piece]);
+        var This = this;
+        this.file.write(blob, this.file_meta.piece_size * piece, function() {
+          if (_.isFunction(This.onpiece)) {
+            This.onpiece(piece);
+          }
+          _.defer(_.bind(This.update_bitmap, This));
+
+          // check all finished
+          if (_.all(This.finished_piece) && _.isEmpty(This.piece_queue) &&
+              _.isFunction(This.onfinished)) {
+            This.onfinished();
+          }
+        });
+        this.finished_piece[piece] = 1;
+        this.piece_queue.splice(this.piece_queue.indexOf(piece), 1);
+        delete this.block_chunks[piece];
+        delete this.finished_block[piece];
+        delete this.pending_block[piece];
+      }
+      _.defer(_.bind(this.start_process, this));
     },
 
     onwsopen: function() { },
@@ -328,7 +352,6 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
               this.finished_piece[i] = 0;
               this.piece_queue.push(i);
             }
-            this.piece_queue.reverse();
 
             var This = this;
             this.file = new FileSystem.File(this.file_meta.size, function() {

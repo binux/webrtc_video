@@ -163,7 +163,7 @@ define(['underscore'], function(__) {
         this.peer_connection.addIceCandidate(candidate);
       } else if (data.type == 'offer') {
         this.peer_connection.setRemoteDescription(new RTCSessionDescription(data.desc));
-        if (this.peer_connection.remoteDescription.type == "offer") {
+        if (this.peer_connection.remoteDescription && this.peer_connection.remoteDescription.type == "offer") {
           this.peer_connection.createAnswer(_.bind(this.onoffer, this));
         }
       }
