@@ -11,7 +11,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     this.ws = null;
     this.peers = {};
     this.ready = false;
-    this.min_speed_limit = 8*1024; // 8kb/s
+    this.min_speed_limit = 4*1024; // 4kb/s
 
     this.block_per_connect = 4;
     this.connect_limit = 30;
@@ -75,6 +75,14 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
 
       var min = _.min(tmp);
       return min+(_.filter(tmp, function(num) { return num > min; }).length / tmp.length);
+    },
+
+    move_top: function(piece) {
+      var index = this.piece_queue.indexOf(piece);
+      if (index != -1) {
+        this.piece_queue.splice(index, 1);
+      }
+      this.piece_queue.unshift(piece);
     },
 
     // export 
@@ -318,7 +326,9 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
           }
         });
         this.finished_piece[piece] = 1;
-        this.piece_queue.splice(this.piece_queue.indexOf(piece), 1);
+        if (this.piece_queue.indexOf(piece) != -1) {
+          this.piece_queue.splice(this.piece_queue.indexOf(piece), 1);
+        }
         delete this.block_chunks[piece];
         delete this.finished_block[piece];
         delete this.pending_block[piece];

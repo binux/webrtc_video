@@ -53,14 +53,16 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
     };
 
     var create_video = _.once(function(url) {
-      J_console.append('<li><video id=J_video>video not supported</video>');
+      J_console.append('<li><div id=J_video_wrap><video id=J_video>video not supported</video></div>');
       var video = $('#J_video').get(0);
       var on_error_time = 0;
       video.src = url;
       video.preload = 'metadata';
-      video.autoplay = true;
-      video.controls = false;
+      video.autoplay = false;
+      video.controls = true;
       video.addEventListener('canplay', function() {
+        $('#J_video_wrap').width('auto');
+        $('#J_video_wrap').height('auto');
         if (on_error_time) {
           video.currentTime = on_error_time;
           video.play();
@@ -68,16 +70,40 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
       });
       video.addEventListener('error', function() {
         on_error_time = Math.max(0, video.currentTime);
+        console.debug('video: play error on '+on_error_time+', retry in 5s.');
         setTimeout(function() {
+          $('#J_video_wrap').width($(video).width()); // hold video width
+          $('#J_video_wrap').height($(video).height());
           video.load();
         }, 5000);
       });
+      video.addEventListener('seeking', _.throttle(function(evt) {
+        var seektime = Math.max(0, video.currentTime);
+        if (seektime == on_error_time) {
+          return ;
+        }
+        on_error_time = seektime;
+        var piece = Math.floor(seektime / video.duration * client.file_meta.piece_cnt);
+
+        var pre_seek = 8;
+        for (var i=client.file_meta.piece_cnt-1; i>piece+pre_seek; i--) {
+          client.move_top(i);
+        }
+        for (i=pre_seek; i>0; i--) {
+          client.move_top(piece+i);
+          client.move_top(piece-i);
+        }
+        client.move_top(piece);
+
+        client.start_process();
+        console.debug('seeking to '+seektime+', move piece '+piece+' to top.');
+      }, 500));
     });
 
     client.onpiece = function(piece) {
       $('#J_progress').text(''+(_.filter(client.finished_piece, _.identity).length / client.finished_piece.length * 100).toFixed(2)+'%');
 
-      if (piece === 0 && 'video/ogg,video/mp4'.indexOf(client.file_meta.type) != -1) {
+      if (piece === 0 && 'video/ogg,video/mp4,video/webm'.indexOf(client.file_meta.type) != -1) {
         create_video(client.file.toURL());
       }
     };
