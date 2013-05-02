@@ -11,7 +11,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     this.ws = null;
     this.peers = {};
     this.ready = false;
-    this.min_speed_limit = 4*1024; // 4kb/s
+    this.min_speed_limit = 1*1024; // 1kb/s
 
     this.block_per_connect = 4;
     this.connect_limit = 30;
