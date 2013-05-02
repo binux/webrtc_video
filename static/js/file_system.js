@@ -6,7 +6,7 @@
 define(['underscore'], function() {
   var requestFileSystem;
   if (window.webkitRequestFileSystem) {
-    requestFileSystem = window.webkitRequestFileSystem;
+    window.requestFileSystem = window.webkitRequestFileSystem;
   }
 
   function fileSystemFile(size, callback) {
@@ -121,7 +121,7 @@ define(['underscore'], function() {
         function write() {
           if (size > 0) {
             var write_size = size > (1 << 26) ? (1 << 26) : size; /* 64M */
-            fw.write(new Blob([new ArrayBuffer(write_size)]));
+            fw.write(new Blob([new Uint8Array(write_size)]));
             size -= write_size;
           } else if (_.isFunction(This.callback)) {
             This.callback();

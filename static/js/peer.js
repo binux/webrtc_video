@@ -6,16 +6,15 @@
 
 define(['underscore'], function(__) {
   var Browser = null;
-  var RTCPeerConnection = null;
 
   if (window.mozRTCPeerConnection) {
     Browser = 'moz';
-    RTCPeerConnection = mozRTCPeerConnection;
-    RTCSessionDescription = mozRTCSessionDescription;
-    RTCIceCandidate = mozRTCIceCandidate;
+    window.RTCPeerConnection = mozRTCPeerConnection;
+    window.RTCSessionDescription = mozRTCSessionDescription;
+    window.RTCIceCandidate = mozRTCIceCandidate;
   } else if (window.webkitRTCPeerConnection) {
     Browser = 'webkit';
-    RTCPeerConnection = webkitRTCPeerConnection;
+    window.RTCPeerConnection = webkitRTCPeerConnection;
   }
 
   function Peer(ws, origin, target) {

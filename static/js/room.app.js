@@ -5,6 +5,20 @@
 
 define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
   var J_console = $('#J_console');
+
+  // feature detect
+  var feature = ['JSON', 'WebSocket', 'URL', 'ArrayBuffer', 'Uint8Array', 'Blob',
+    'File', 'requestFileSystem', 'FileError', 'RTCPeerConnection', 'RTCIceCandidate',
+    'RTCSessionDescription'];
+  var miss_feature = false;
+  _.each(feature, function(f) {
+    if (!window[f]) {
+      miss_feature = true;
+      J_console.append('<li><span class=error>Need Feature: '+f+'</span>');
+    }
+  });
+  if (miss_feature) return;
+
   var client = new p2p.Client();
   J_console.append('<li>websocket connecting...');
 
@@ -20,7 +34,7 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
                         '<dt>progress</dt> <dd id=J_progress>0%</dd>'+
                         '<dt>health</dt> <dd id=J_health>0%</dd>'+
                         '<dt>peers</dt> <dd id=J_peers>1</dd>'+
-                        '<dt>connected</dt> <dd id=J_conn>0</dd>'+
+                        '<dt>connected</dt> <dd id=J_:e conn>0</dd>'+
                         '<dt>upload</dt> <dd id=J_ups>0B/s</dd> <dd id=J_up>0B</dd>'+
                         '<dt>download</dt> <dd id=J_dls>0B/s</dd> <dd id=J_dl>0B</dd>'+
                        '</dl> <button id=J_refresh_peer_list>refresh</button>');

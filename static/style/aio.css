@@ -5,3 +5,6 @@
 video {
   max-width: 100%;
 }
+span.error {
+  color: #c0392b;
+}

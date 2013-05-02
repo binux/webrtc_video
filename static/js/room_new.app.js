@@ -5,6 +5,20 @@
 
 define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_meta, p2p, utils) {
   var J_console = $('#J_console');
+
+  // feature detect
+  var feature = ['JSON', 'WebSocket', 'URL', 'Worker', 'ArrayBuffer', 'Uint8Array',
+    'File', 'Blob', 'requestFileSystem', 'FileError', 'RTCPeerConnection', 'RTCIceCandidate',
+    'RTCSessionDescription'];
+  var miss_feature = false;
+  _.each(feature, function(f) {
+    if (!window[f]) {
+      miss_feature = true;
+      J_console.append('<li><span class=error>Need Feature: '+f+'</span>');
+    }
+  });
+  if (miss_feature) return;
+
   var client = new p2p.Client();
   J_console.append('<li>websocket connecting...');
 
