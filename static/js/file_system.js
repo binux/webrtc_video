@@ -61,7 +61,35 @@ define(['underscore'], function() {
 
     // private
     init: function() {
-      requestFileSystem(window.TEMPORARY, 5*1024*1024*1024 /* 5G */, _.bind(this.oninitfs, this));
+      requestFileSystem(window.TEMPORARY, 5*1024*1024*1024 /* 5G */, _.bind(this.oninitfs, this), this.onerror);
+      window.addEventListener('beforeunload', _.bind(function() {
+        if (this.file_entry) {
+          this.file_entry.remove(function() {}, this.onerror);
+        }
+      }, this));
+    },
+
+    onerror: function(e) {
+      console.log(e);
+      switch (e.code) {
+        case FileError.QUOTA_EXCEEDED_ERR:
+          alert('Error writing file, is your harddrive almost full?');
+          break;
+        case FileError.NOT_FOUND_ERR:
+          alert('NOT_FOUND_ERR');
+          break;
+        case FileError.SECURITY_ERR:
+          alert('SECURITY_ERR');
+          break;
+        case FileError.INVALID_MODIFICATION_ERR:
+          alert('INVALID_MODIFICATION_ERR');
+          break;
+        case FileError.INVALID_STATE_ERR:
+          alert('INVALID_STATE_ERROR');
+          break;
+        default:
+          alert('webkitRequestFileSystem failed as ' + e.code);
+      }
     },
 
     // step 1
@@ -74,7 +102,7 @@ define(['underscore'], function() {
     check_exist: function() {
       this.fs.root.getFile(this.filename, {}, function(file_entry) {
         file_entry.remove(function() { _.bind(this.create_file, this); });
-      }, _.bind(this.create_file, this));
+      }, _.bind(this.create_file, this), this.onerror);
     },
 
     // step 3
@@ -83,7 +111,7 @@ define(['underscore'], function() {
       this.fs.root.getFile(this.filename, {create: true, exclusive: true}, function(file_entry) {
         This.file_entry = file_entry;
         _.bind(This.alloc, This)(This.size);
-      });
+      }, this.onerror);
     },
 
     // step 4

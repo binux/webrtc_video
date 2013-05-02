@@ -104,6 +104,9 @@ define(['underscore'], function(__) {
     },
 
     send: function(obj) {
+      if (this.peer_connection && this.peer_connection.iceConnectionState == 'disconnected') {
+        this.close();
+      }
       if (this.closed)
         return ;
       if (_.isObject(obj)) {
@@ -291,6 +294,10 @@ define(['underscore'], function(__) {
   }, 1000);
 
   PeerWithChunkSupport.prototype.retry_send = function(p) {
+    if (this.peer_connection && this.peer_connection.iceConnectionState == 'disconnected') {
+      this.close();
+      return ;
+    }
     if (this.peer_connection && this.data_channel && _.has(this.send_cache, p)) {
       //console.debug('send: ', _.omit(this.send_cache[p], 'd'));
       this.data_channel.send(JSON.stringify(this.send_cache[p]));
