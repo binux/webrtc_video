@@ -23,7 +23,7 @@ define(function() {
           spare_str = spare_left.toString()+"KB";
         }
         else{
-          spare_str = spare_size + "B";
+          spare_str = spare_size.toFixed(0) + "B";
         }
         return spare_str;
     },
@@ -44,6 +44,5 @@ define(function() {
         return ">1s";
       }
     }
-
   };
 });

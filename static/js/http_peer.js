@@ -21,24 +21,17 @@ define(['underscore'], function() {
         var req = new XMLHttpRequest();
         req.open('GET', this.url, true);
         req.setRequestHeader('Range', 'bytes='+start+'-'+(start+this.client.file_meta.block_size-1));
-        req.responseType = 'blob';
+        req.responseType = 'arraybuffer';
 
         var This = this;
         var start_time = (new Date()).getTime();
         req.addEventListener('load', function(evt) {
           if (200 <= req.status && req.status < 300) {
-            var reader = new FileReader();
-            reader.onload = function(evt) {
-              var data = evt.target.result;
-              This.onmessage(JSON.stringify({
-                cmd: 'block',
-                piece: obj.piece,
-                block: obj.block,
-                data: data
-              }));
-              This.recved += data.length;
-            };
-            reader.readAsBinaryString(req.response);
+            var data = new Uint8Array(req.response);
+            This.recved += data.byteLength;
+            if (_.isFunction(This.onmessage)) {
+              This.onmessage({cmd: 'block', piece: obj.piece, block: obj.block, data: data});
+            }
           } else {
             This.close();
           }

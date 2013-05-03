@@ -69,28 +69,53 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
             var url = $('#J_hp').val();
             if (url !== '') {
               var peer = client.ensure_connection(url, false);
+
               peer.onmessage = function(data) {
-                var msg = JSON.parse(data);
-                var start = client.file_meta.piece_size*msg.piece+
-                  client.file_meta.block_size*msg.block;
-                client.file.readAsBinaryString(start,
-                                               start+client.file_meta.block_size,
-                                               function(data) {
-                                                 if (msg.data == data) {
-                                                   $('#J_hp_result').text('testing address...');
-                                                   // ok
-                                                   $('#J_hp').attr('disable', false);
-                                                   $('#J_hp_add').attr('disable', false);
-                                                   $('#J_hp_result').text('ok');
-                                                   client.add_http_peer(url);
-                                                 } else {
-                                                   // error
-                                                   $('#J_hp').attr('disable', false);
-                                                   $('#J_hp_add').attr('disable', false);
-                                                   $('#J_hp_result').text('data different');
-                                                   if (_.isFunction(peer._onclose)) peer._onclose();
-                                                 }
-                                               });
+                var _data, piece, block;
+                if (_.isObject(data) || data.indexOf('{') === 0) {
+                  var msg = _.isObject(data) ? data : JSON.parse(data);
+                  if (msg.cmd == 'request_block') {
+                  } else if (msg.cmd == 'block') {
+                    piece = msg.piece;
+                    block = msg.block;
+                    _data = msg.data;
+                  }
+                } else {  // proto 2
+                  var piece_block = data.slice(0, data.indexOf('|')).split(',');
+                  piece = parseInt(piece_block[0], 10);
+                  block = parseInt(piece_block[1], 10);
+                  _data = data.slice(data.indexOf('|')+1);
+                }
+
+                // conv to binnaryString
+                if (_data.byteLength) {
+                  var result = '';
+                  _data = new Uint8Array(_data);
+                  for (var i=0; i<_data.length; i++) {
+                    result += String.fromCharCode(_data[i]);
+                  }
+                  _data = result;
+                }
+
+                var start = client.file_meta.piece_size*piece+
+                  client.file_meta.block_size*block;
+                var end = start+client.file_meta.block_size;
+                client.file.readAsBinaryString(start, end, function(fdata) {
+                  if (fdata == _data) {
+                    $('#J_hp_result').text('testing address...');
+                    // ok
+                    $('#J_hp').attr('disable', false);
+                    $('#J_hp_add').attr('disable', false);
+                    $('#J_hp_result').text('ok');
+                    client.add_http_peer(url);
+                  } else {
+                    // error
+                    peer.close();
+                    $('#J_hp').attr('disable', false);
+                    $('#J_hp_add').attr('disable', false);
+                    $('#J_hp_result').text('data different');
+                  }
+                });
               };
               peer._onclose = peer.onclose();
               peer.onclose = function() {

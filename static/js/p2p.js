@@ -105,6 +105,22 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
           p = new peer.Peer(this.ws, this.peerid, peerid);
 
         this.inuse_peer[peerid] = 0;
+        this.peers[peerid] = p;
+
+        p.onmessage = _.bind(function(data) {
+          if (_.isObject(data) || data.indexOf('{') === 0) {
+            var msg = _.isObject(data) ? data : JSON.parse(data);
+            if (msg.cmd == 'request_block') {
+              this.send_block(p, msg.piece, msg.block);
+            } else if (msg.cmd == 'block') {
+              this.recv_block(p, msg.piece, msg.block, msg.data);
+            }
+          } else {  // proto 2
+            var piece_block = data.slice(0, data.indexOf('|')).split(',');
+            data = data.slice(data.indexOf('|')+1);
+            this.recv_block(p, parseInt(piece_block[0], 10), parseInt(piece_block[1], 10), data);
+          }
+        }, this);
         p.onclose = _.bind(function() {
           console.log('peer connect with '+peerid+' disconnected;');
           delete this.peers[peerid];
@@ -112,25 +128,11 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
             this.onpeerdisconnect(p);
           }
         }, this);
-        p.onmessage = _.bind(function(data) {
-          var msg = JSON.parse(data);
-          //console.log('FROM:'+p.target+': '+(msg.cmd||msg));
-          switch (msg.cmd) {
-            case 'request_block':
-              this.send_block(p, msg.piece, msg.block);
-              break;
-            case 'block':
-              this.recv_block(p, msg.piece, msg.block, msg.data);
-              break;
-            default:
-              break;
-          } 
-        }, this);
         p.onspeedreport = _.bind(function(report) { this.speed_report(p, report); }, this);
         if (connect) {
           p.connect();
         }
-        this.peers[peerid] = p;
+
         if (_.isFunction(this.onpeerconnect)) {
           this.onpeerconnect(p);
         }
@@ -145,12 +147,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
 
       var start = this.file_meta.piece_size*piece + this.file_meta.block_size*block;
       this.file.readAsBinaryString(start, start+this.file_meta.block_size, function(data) {
-        peer.send({
-          cmd: 'block',
-          piece: piece,
-          block: block,
-          data: data
-        });
+        peer.send(''+piece+','+block+'|'+data);
       });
     },
 
@@ -162,17 +159,21 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
     recv_block: function(peer, piece, block, data) {
       //console.log('recv block '+piece+','+block);
       if (this.finished_block[piece] && this.finished_block[piece][block] != 1) {
+        // conv to arraybuffer
+        if (data.byteLength === undefined) {
+          var binarray = new Uint8Array(data.length);
+          for (var i=0;i<data.length;i++) {
+            binarray[i] = data.charCodeAt(i) & 0xff;
+          }
+          data = binarray;
+        }
+
         if (this.pending_block[piece][block]) {
           this.inuse_peer[this.pending_block[piece][block]] -= 1;
           this.pending_block[piece][block] = 0;
         }
         this.finished_block[piece][block] = 1;
-        // save as binnary data
-        var binarray = new Uint8Array(data.length);
-        for (var i=0;i<data.length;i++) {
-          binarray[i] = data.charCodeAt(i) & 0xff;
-        }
-        this.block_chunks[piece][block] = binarray;
+        this.block_chunks[piece][block] = data;
         this.onblock_finished(piece, block);
       }
     },
