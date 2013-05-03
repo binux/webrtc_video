@@ -10,33 +10,16 @@ define(['underscore'], function() {
     this.url = url;
     this.client = client;
     this.recved = 0;
-    this.piece_cache = {}; // request hold piece instead of one
   }
 
   HttpPeer.prototype = {
-    send: function(obj) {
+    send: function (obj) {
       if (obj.cmd == 'request_block') {
-        if (_.has(this.piece_cache, obj.piece)) {
-          var offset = this.client.file_meta.block_size*obj.block;
-          var data = this.piece_cache[obj.piece].slice(offset, this.client.file_meta.block_size+offset);
-          this.onmessage(JSON.stringify({
-            cmd: 'block',
-            piece: obj.piece,
-            block: obj.block,
-            data: data
-          }));
-        } else {
-          this._send(obj);
-        }
-      }
-    },
-
-    _send: function (obj) {
-      if (obj.cmd == 'request_block') {
-        var start = this.client.file_meta.piece_size*obj.piece;
+        var start = this.client.file_meta.piece_size*obj.piece+
+          this.client.file_meta.block_size*obj.block;
         var req = new XMLHttpRequest();
         req.open('GET', this.url, true);
-        req.setRequestHeader('Range', 'bytes='+start+'-'+(start+this.client.file_meta.piece_size-1));
+        req.setRequestHeader('Range', 'bytes='+start+'-'+(start+this.client.file_meta.block_size-1));
         req.responseType = 'blob';
 
         var This = this;
@@ -46,9 +29,13 @@ define(['underscore'], function() {
             var reader = new FileReader();
             reader.onload = function(evt) {
               var data = evt.target.result;
-              This.piece_cache[obj.piece] = data;
+              This.onmessage(JSON.stringify({
+                cmd: 'block',
+                piece: obj.piece,
+                block: obj.block,
+                data: data
+              }));
               This.recved += data.length;
-              _.defer(_.bind(This.send, This), obj);
             };
             reader.readAsBinaryString(req.response);
           } else {

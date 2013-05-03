@@ -229,6 +229,7 @@ define(['peer', 'http_peer', 'file_system', 'underscore', 'lib/sha1.min'], funct
     find_available_peer: function(piece) {
       var peers = [];
       for (var key in this.peer_list) {
+        if (key == this.peerid) continue;
         if (this.peer_list[key].bitmap[piece] &&
             (!_.has(this.inuse_peer, key) || this.inuse_peer[key] < this.block_per_connect) &&
             !this.blocked_peer[key]) {
