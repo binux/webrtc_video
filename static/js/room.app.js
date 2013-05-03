@@ -69,6 +69,7 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
     var create_video = _.once(function(url) {
       J_console.append('<li><div id=J_video_wrap><video id=J_video>video not supported</video></div>');
       var video = $('#J_video').get(0);
+      var video_pre_seek = 8;
       var on_error_time = 0;
       video.src = url;
       video.preload = 'metadata';
@@ -99,18 +100,32 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
         on_error_time = seektime;
         var piece = Math.floor(seektime / video.duration * client.file_meta.piece_cnt);
 
-        var pre_seek = 8;
-        for (var i=client.file_meta.piece_cnt-1; i>piece+pre_seek; i--) {
-          client.move_top(i);
+        var new_queue = [], pre_seek_l = [], pre_seek_g = [], other = [];
+        for (var i=0; i<client.piece_queue.length; i++) {
+          var p = client.piece_queue[i];
+          if (p > piece - video_pre_seek && p < piece)
+            pre_seek_l.push(p);
+          else if (p >= piece && p < piece + video_pre_seek)
+            pre_seek_g.push(p);
+          else if (p > piece)
+            new_queue.push(p);
+          else
+            other.push(p);
         }
-        for (i=pre_seek; i>0; i--) {
-          client.move_top(piece+i);
-          client.move_top(piece-i);
+        pre_seek_l.sort().reverse();
+        pre_seek_g.sort();
+        new_queue.sort();
+        other.sort();
+        while (pre_seek_l.length + pre_seek_g.length > 0) {
+          if (pre_seek_g.length > 0)
+            new_queue.unshift(pre_seek_g.pop());
+          if (pre_seek_l.length > 0)
+            new_queue.unshift(pre_seek_l.pop());
         }
-        client.move_top(piece);
-
+        client.piece_queue = new_queue.concat(other);
         client.start_process();
-        console.debug('seeking to '+seektime+', move piece '+piece+' to top.');
+
+        console.debug('seeking to '+seektime+', move piece '+piece+' to top.', client.piece_queue);
       }, 500));
     });
 

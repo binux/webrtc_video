@@ -77,14 +77,6 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       return min+(_.filter(tmp, function(num) { return num > min; }).length / tmp.length);
     },
 
-    move_top: function(piece) {
-      var index = this.piece_queue.indexOf(piece);
-      if (index != -1) {
-        this.piece_queue.splice(index, 1);
-      }
-      this.piece_queue.unshift(piece);
-    },
-
     // export 
     onready: function() { console.log('onready'); },
     onfilemeta: function(file_meta) { console.log('onfilemeta', file_meta); },
