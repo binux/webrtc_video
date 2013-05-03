@@ -72,6 +72,11 @@ class RoomWebSocket(BaseWebSocket):
         if self.peer:
             self.peer.bitmap = data['bitmap']
 
+    def cmd_add_http_peer(self, data):
+        if self.room:
+            peer = self.room.join(data['url'], self)
+            peer.bitmap = data['bitmap']
+
 handlers = [
         (r'/room', ListRoomHandler),
         (r'/room/new', NewHandler),

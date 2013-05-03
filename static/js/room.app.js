@@ -62,8 +62,8 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
     client.onspeedreport = function(report) {
       $('#J_ups').text(utils.format_size(report.send)+'/s');
       $('#J_dls').text(utils.format_size(report.recv)+'/s');
-      $('#J_up').text(utils.format_size(client.sended));
-      $('#J_dl').text(utils.format_size(client.recved));
+      $('#J_up').text(utils.format_size(report.sended));
+      $('#J_dl').text(utils.format_size(report.recved));
     };
 
     var create_video = _.once(function(url) {

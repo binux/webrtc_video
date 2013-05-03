@@ -3,7 +3,7 @@
 //         http://binux.me
 // Created on 2013-04-22 17:20:48
 
-define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, FileSystem) {
+define(['peer', 'http_peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, hpeer, FileSystem) {
   function Client() {
     this.peerid = null;
     this.file_meta = null;
@@ -26,8 +26,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     this.block_chunks = {};
 
     this.peer_speed = {};
-    this.sended = 0;
-    this.recved = 0;
+    this.peer_trans = {};
 
     this.init();
   }
@@ -46,6 +45,11 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
 
     join_room: function(room_id) {
       this.ws.send(JSON.stringify({cmd: 'join_room', roomid: room_id}));
+    },
+
+    add_http_peer: function(url) {
+      this.ws.send(JSON.stringify({cmd: 'add_http_peer', url: url,
+                                   bitmap: client.finished_piece.join('')}));
     },
 
     update_peer_list: function() {
@@ -92,7 +96,12 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
       if (this.peers[peerid]) {
         return this.peers[peerid];
       } else {
-        var p = new peer.Peer(this.ws, this.peerid, peerid);
+        var p;
+        if (peerid.indexOf('http:') === 0 || peerid.indexOf('https:') === 0)
+          p = new hpeer.Peer(peerid, this);
+        else
+          p = new peer.Peer(this.ws, this.peerid, peerid);
+
         this.inuse_peer[peerid] = 0;
         p.onclose = _.bind(function() {
           console.log('peer connect with '+peerid+' disconnected;');
@@ -167,9 +176,7 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
     },
 
     speed_report: function(peer, report) {
-      this.peer_speed[peer.id] = report;
-      this.sended += report.send;
-      this.recved += report.recv;
+      this.peer_trans[peer.id] = this.peer_speed[peer.id] = report;
       this._reset_speed();
     },
     _reset_speed: _.throttle(function() {
@@ -179,7 +186,9 @@ define(['peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, Fil
         recv += this.peer_speed[k].recv;
       }
       if (_.isFunction(this.onspeedreport)) {
-        this.onspeedreport({send: send, recv: recv});
+        var sended = _.reduce(_.pluck(this.peer_trans, 'sended'), function(memo, num) { return memo+num; }, 0);
+        var recved = _.reduce(_.pluck(this.peer_trans, 'recved'), function(memo, num) { return memo+num; }, 0);
+        this.onspeedreport({send: send, sended: sended, recv: recv, recved: recved});
       }
       this.peer_speed = {};
       this._reset_speed();

@@ -4,7 +4,7 @@
 // Created on 2013-04-24 10:48:28
 
 
-define(['underscore'], function(__) {
+define(['underscore'], function() {
   var Browser = null;
 
   if (window.mozRTCPeerConnection) {
@@ -18,6 +18,7 @@ define(['underscore'], function(__) {
   }
 
   function Peer(ws, origin, target) {
+    this.id = target;
     this.ws = ws;
     this.origin = origin;
     this.target = target;
@@ -50,11 +51,6 @@ define(['underscore'], function(__) {
   }
 
   Peer.prototype = {
-    maybe_init: function() {
-      if (this.peer_connection === null) {
-        this.init();
-      }
-    },
 
     init: function() {
       console.debug('Creating PeerConnection');
@@ -140,6 +136,13 @@ define(['underscore'], function(__) {
     onready: function() {},
     onclose: function() {},
     onmessage: function() {},
+
+    // private
+    maybe_init: function() {
+      if (this.peer_connection === null) {
+        this.init();
+      }
+    },
 
     transformOutgoingSdp: function(sdp) {
       // important
@@ -285,7 +288,8 @@ define(['underscore'], function(__) {
 
   PeerWithChunkSupport.prototype._onspeedreport = _.throttle(function() {
     if (_.isFunction(this.onspeedreport)) {
-      this.onspeedreport({send: this.send_in_1sec, recv: this.recv_in_1sec});
+      this.onspeedreport({send: this.send_in_1sec, sended: this.sended,
+                          recv: this.recv_in_1sec, recved: this.recved});
     }
     this.send_in_1sec = 0;
     this.recv_in_1sec = 0;

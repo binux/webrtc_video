@@ -60,6 +60,53 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
           });
           client.update_peer_list();
           setInterval(_.bind(client.update_peer_list, client), 60*1000); // 1min
+
+          J_console.append('<li>add http_peer: <input id=J_hp />'+
+                           ' <span id=J_hp_result></span> '+
+                           '<a id=J_hp_add href=#>add</a>');
+          $('#J_hp_add').on('click', function(evt) {
+            evt.preventDefault();
+            var url = $('#J_hp').val();
+            if (url !== '') {
+              var peer = client.ensure_connection(url, false);
+              peer.onmessage = function(data) {
+                var msg = JSON.parse(data);
+                var start = client.file_meta.piece_size*msg.piece+
+                  client.file_meta.block_size*msg.block;
+                client.file.readAsBinaryString(start,
+                                               start+client.file_meta.block_size,
+                                               function(data) {
+                                                 if (msg.data == data) {
+                                                   $('#J_hp_result').text('testing address...');
+                                                   // ok
+                                                   $('#J_hp').attr('disable', false);
+                                                   $('#J_hp_add').attr('disable', false);
+                                                   $('#J_hp_result').text('ok');
+                                                   client.add_http_peer(url);
+                                                 } else {
+                                                   // error
+                                                   $('#J_hp').attr('disable', false);
+                                                   $('#J_hp_add').attr('disable', false);
+                                                   $('#J_hp_result').text('data different');
+                                                   if (_.isFunction(peer._onclose)) peer._onclose();
+                                                 }
+                                               });
+              };
+              peer._onclose = peer.onclose();
+              peer.onclose = function() {
+                // error
+                $('#J_hp').attr('disable', false);
+                $('#J_hp_add').attr('disable', false);
+                $('#J_hp_result').text('error');
+                if (_.isFunction(peer._onclose)) peer._onclose();
+              };
+              client.request_block(peer, _.random(client.file_meta.piece_cnt), _.random(client.file_meta.piece_size / client.file_meta.block_size));
+              $('#J_hp').attr('disable', true);
+              $('#J_hp_add').attr('disable', true);
+              $('#J_hp_result').text('testing address...');
+            }
+            return false;
+          });
         });
       };
     });
@@ -81,8 +128,8 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
   client.onspeedreport = function(report) {
     $('#J_ups').text(utils.format_size(report.send)+'/s');
     $('#J_dls').text(utils.format_size(report.recv)+'/s');
-    $('#J_up').text(utils.format_size(client.sended));
-    $('#J_dl').text(utils.format_size(client.recved));
+    $('#J_up').text(utils.format_size(report.sended));
+    $('#J_dl').text(utils.format_size(report.recved));
   };
 
   return {
