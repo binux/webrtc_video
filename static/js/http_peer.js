@@ -2,6 +2,7 @@
 // Author: Binux<i@binux.me>
 //         http://binux.me
 // Created on 2013-05-03 10:31:31
+// !!NOT RECOMMENDED!! really poor performance
 
 define(['underscore'], function() {
   // HTTP Peer adapter for p2p.js

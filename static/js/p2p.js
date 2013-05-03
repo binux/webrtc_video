@@ -3,7 +3,7 @@
 //         http://binux.me
 // Created on 2013-04-22 17:20:48
 
-define(['peer', 'http_peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, hpeer, FileSystem) {
+define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, hpeer, ws_peer, FileSystem) {
   function Client() {
     this.peerid = null;
     this.file_meta = null;
@@ -99,6 +99,8 @@ define(['peer', 'http_peer', 'file_system', 'underscore', 'lib/sha1.min'], funct
         var p;
         if (peerid.indexOf('http:') === 0 || peerid.indexOf('https:') === 0)
           p = new hpeer.Peer(peerid, this);
+        else if (peerid.indexOf('ws:') === 0 || peerid.indexOf('wss:') === 0)
+          p = new ws_peer.Peer(peerid, this);
         else
           p = new peer.Peer(this.ws, this.peerid, peerid);
 

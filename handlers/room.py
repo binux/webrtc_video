@@ -34,7 +34,7 @@ class RoomWebSocket(BaseWebSocket):
 
     def on_message(self, message):
         data = json.loads(message)
-        logging.debug('ws: %s' % data)
+        logging.debug('ws: %s' % message)
 
         if data.get('cmd') and callable(getattr(self, 'cmd_'+data.get('cmd', ''), None)):
             getattr(self, 'cmd_'+data.get('cmd', ''))(data)

@@ -11,10 +11,11 @@ import tornado.web
 from tornado.options import define, options
 from libs.room_manager import RoomManager
 
-define("bind", default="127.0.0.1", help="addrs that debugger bind to")
-define("port", default=8888, help="the port that debugger listen to")
+define("bind", default="127.0.0.1", help="addrs bind to")
+define("port", default=8888, help="the port listen to")
 define("debug", default=False, help="debug mode")
 define("config", default="", help="config file")
+define("file_path", default="./data/", help="file path for websocket peer")
 
 class Application(tornado.web.Application):
     def __init__(self):
