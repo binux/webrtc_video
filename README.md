@@ -1,15 +1,25 @@
-{% extends base.html %}
-
-{% block main %}
 webrtc_video
 ============
 
 A plugin-less P2P video live sharing through webrtc.
 *** only support chrome at present ***
 
+# demo
+[http://webrtc.binux.me/](http://webrtc.binux.me/)
+
+# Getting Start
+```
+easy_install tornado
+python application.py
+```
+
+`python application.py --help` for more arguments.
+  
+  
+  
 # How To Use
 ### Share
-1. visit `<a href="/room/new">/room/new</a>`
+1. visit `/room/new`
 2. choice a file to share.
 3. share this link like `/room/{{ hash }}` to others.
 3. ***done close this page!***
@@ -24,4 +34,3 @@ NOTICE: the filename of websocket peer server which is placed in `project_path/d
 
 ## License
 webrtc_video is licensed under the MIT license.
-{% end %}
