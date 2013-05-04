@@ -11,7 +11,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
     this.ws = null;
     this.peers = {};
     this.ready = false;
-    this.min_speed_limit = 1*1024; // 1kb/s
+    this.min_speed_limit = 16*1024; // 16kb/s
 
     this.block_per_connect = 4;
     this.connect_limit = 30;

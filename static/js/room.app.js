@@ -103,9 +103,9 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
         var new_queue = [], pre_seek_l = [], pre_seek_g = [], other = [];
         for (var i=0; i<client.piece_queue.length; i++) {
           var p = client.piece_queue[i];
-          if (p > piece - video_pre_seek && p < piece)
+          if (piece - video_pre_seek < p && p < piece)
             pre_seek_l.push(p);
-          else if (p >= piece && p < piece + video_pre_seek)
+          else if (piece <= p && p < piece + video_pre_seek)
             pre_seek_g.push(p);
           else if (p > piece)
             new_queue.push(p);

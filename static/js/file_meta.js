@@ -8,16 +8,16 @@ define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
 
   return {
     choice_piece_size: function(file_size) {
-      var psize = 1 << 18; // 256KB
-      while (file_size / psize > 256) {
+      var psize = 1 << 20; // 1M 
+      while (file_size / psize > 128) {
         psize <<= 1;
       }
       return psize;
     },
 
     choice_block_size: function(piece_size) {
-      var bsize = piece_size >> 4;
-      while (bsize > 1 << 16) { // 64KB
+      var bsize = psize;
+      while (bsize > 1 << 23) { // 8M
         bsize >>= 1;
       }
       return bsize;
