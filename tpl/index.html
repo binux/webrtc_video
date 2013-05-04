@@ -1,27 +1,33 @@
 {% extends base.html %}
 
 {% block main %}
+<pre>
 webrtc_video
 ============
 
 A plugin-less P2P video live sharing through webrtc.
 *** only support chrome at present ***
 
+# Fork Me On GitHub
+<a href="https://github.com/binux/webrtc_video" target="_blank">binux/webrtc_video</a>
+
 # How To Use
 ### Share
 1. visit `<a href="/room/new">/room/new</a>`
 2. choice a file to share.
 3. share this link like `/room/{{ hash }}` to others.
-3. ***done close this page!***
+3. **DO NOT CLOSE THE PAGE!**
 
 ### Add a http peer
-1. make use the http server support [CORS](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) and Range header.
+1. make sure the http server support [CORS](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) and Range header.
 2. fill in the url, wait for checking.
-3. you can also copy the file to `project_path/data/`, and use a websocket peer with filling in the url like `ws://host:port/file/{{ filename }}`. 
+3. you can also copy the file to `project_path/data/`, and use a websocket peer by filling in the url like `ws://host:port/file/{{ filename }}`. 
 
-NOTICE: the filename of websocket peer server which is placed in `project_path/data/` allowed alnum(A-Za-z0-9) only.
+NOTICE: the filename of the file which is placed in `project_path/data/` need alnum(A-Za-z0-9) only.
 
 
 ## License
 webrtc_video is licensed under the MIT license.
+</pre>
+<a href="https://github.com/binux/webrtc_video"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_red_aa0000.png" alt="Fork me on GitHub"></a>
 {% end %}

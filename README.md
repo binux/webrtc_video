@@ -1,7 +1,7 @@
 webrtc_video
 ============
 
-A plugin-less P2P video live sharing through webrtc.
+A plugin-less P2P video live sharing through webrtc.  
 *** only support chrome at present ***
 
 # demo
@@ -22,14 +22,14 @@ python application.py
 1. visit `/room/new`
 2. choice a file to share.
 3. share this link like `/room/{{ hash }}` to others.
-3. ***done close this page!***
+3. **DO NOT CLOSE THE PAGE!**
 
 ### Add a http peer
-1. make use the http server support [CORS](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) and Range header.
+1. make sure the http server support [CORS](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) and Range header.
 2. fill in the url, wait for checking.
-3. you can also copy the file to `project_path/data/`, and use a websocket peer with filling in the url like `ws://host:port/file/{{ filename }}`. 
+3. you can also copy the file to `project_path/data/`, and use a websocket peer by filling in the url like `ws://host:port/file/{{ filename }}`. 
 
-NOTICE: the filename of websocket peer server which is placed in `project_path/data/` allowed alnum(A-Za-z0-9) only.
+NOTICE: the filename of the file which is placed in `project_path/data/` need alnum(A-Za-z0-9) only.
 
 
 ## License
