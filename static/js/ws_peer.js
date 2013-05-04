@@ -35,21 +35,25 @@ define(['underscore'], function() {
     },
 
     _onwsmessage: function(evt) {
-      this._recved += evt.data.byteLength;
-
-      var data = new Uint8Array(evt.data);
-      for (var i=0; i<data.length; i++) {
-        if (data[i] == 124) break; // '|'
-      }
-      var piece_block = '';
-      for (var j=0; j<i; j++) {
-        piece_block += String.fromCharCode(data[j]);
-      }
-      piece_block = piece_block.split(',');
-      data = new Uint8Array(data.buffer.slice(i+1));
-      if (_.isFunction(this.onmessage)) {
-        this.onmessage({cmd: 'block', piece: parseInt(piece_block[0], 10),
-                       block: parseInt(piece_block[1], 10), data: data});
+      this._recved += evt.data.byteLength || evt.data.length;
+      
+      if (evt.data.length) {
+        var msg = JSON.parse(evt.data);
+        if (msg.cmd == 'start') {
+          this.array = [];
+        } else if (msg.cmd == 'end') {
+          var length = 0;
+          _.each(this.array, function(a) { length += a.byteLength; });
+          var data = new Uint8Array(length);
+          var pos = 0;
+          _.each(this.array, function(a) { data.set(a, pos); pos += a.byteLength; });
+          if (_.isFunction(this.onmessage)) {
+            this.onmessage({cmd: 'block', piece: msg.piece, block: msg.block, data: data});
+          }
+          this.array = [];
+        }
+      } else {
+        this.array.push(new Uint8Array(evt.data));
       }
     },
 
@@ -64,26 +68,23 @@ define(['underscore'], function() {
           var data = JSON.stringify({start: start, end: end, piece: obj.piece, block: obj.block});
           this.ws.send(data);
 
-          this.sended += data.length;
+          this._sended += data.length;
         }
       }
     },
 
-    sended: function() {
-      return this._sended;
-    },
+    sended: function() { return this._sended; },
 
-    recved: function() {
-      return this._recved;
-    },
+    recved: function() { return this._recved; },
 
     close: function() {
       if (this.ws) {
         this.ws.close();
         this.ws = null;
       }
-      if (this.onclose) {
-        this.onclose();
+      if (_.isFunction(this.onclose)) {
+        this.closeonce = this.closeonce || _.once(this.onclose);
+        this.closeonce();
       }
     },
 

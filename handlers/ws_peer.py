@@ -20,9 +20,20 @@ class FileWebSocket(BaseWebSocket):
     def on_message(self, message):
         logging.debug('ws_peer: %s' % message)
         data = json.loads(message)
+
+        self.write_message({'cmd': 'start', 'piece': data['piece'], 'block': data['block']})
+
+        pos = data['start']
         self.file.seek(data['start'])
-        block = self.file.read(data['end'] - data['start'])
-        self.write_message('%s,%s|%s' % (data['piece'], data['block'], block), True)
+        while pos < data['end']:
+            to_read = data['end'] - pos
+            if to_read > 1 << 16:  # 64k
+                to_read = 1 << 16
+            block = self.file.read(to_read)
+            self.write_message(block, True)
+            pos += to_read
+
+        self.write_message({'cmd': 'end', 'piece': data['piece'], 'block': data['block']})
 
     def on_close(self):
         pass
