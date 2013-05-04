@@ -15,13 +15,13 @@ A plugin-less P2P video live sharing through webrtc.
 ### Share
 1. visit `<a href="/room/new">/room/new</a>`
 2. choice a file to share.
-3. share this link like `/room/{{ hash }}` to others.
+3. share this link like `/room/[[ hash ]]` to others.
 3. **DO NOT CLOSE THE PAGE!**
 
 ### Add a http peer
 1. make sure the http server support [CORS](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing) and Range header.
 2. fill in the url, wait for checking.
-3. you can also copy the file to `project_path/data/`, and use a websocket peer by filling in the url like `ws://host:port/file/{{ filename }}`. 
+3. you can also copy the file to `project_path/data/`, and use a websocket peer by filling in the url like `ws://host:port/file/[[ filename ]]`. 
 
 NOTICE: the filename of the file which is placed in `project_path/data/` need alnum(A-Za-z0-9) only.
 
