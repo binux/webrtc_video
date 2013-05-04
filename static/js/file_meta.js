@@ -16,7 +16,7 @@ define(['underscore', 'lib/sha1.min'], function(__, _sha1) {
     },
 
     choice_block_size: function(piece_size) {
-      var bsize = psize;
+      var bsize = piece_size;
       while (bsize > 1 << 23) { // 8M
         bsize >>= 1;
       }
