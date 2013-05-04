@@ -16,8 +16,12 @@ class RoomManager(object):
             else:
                 return None
         else:
-            self.rooms[meta['hash']] = Room(meta)
+            self.rooms[meta['hash']] = Room(meta['hash'], meta)
             return self.rooms[meta['hash']]
+
+    def delete(self, roomid):
+        if roomid in self.rooms:
+            del self.rooms[roomid]
 
     def get(self, roomid):
         return self.rooms.get(roomid)
@@ -26,10 +30,11 @@ class RoomManager(object):
         return self.rooms.keys()
 
 class Room(object):
-    def __init__(self, meta):
+    def __init__(self, id, meta):
         for each in ('hash', 'sha1_array', 'filename', 'piece_size', 'block_size', 'size', 'type'):
             setattr(self, each, meta[each])
 
+        self.id = id
         self.meta = meta
         self.title = self.filename
         self.peers = {}

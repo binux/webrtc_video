@@ -48,6 +48,8 @@ class RoomWebSocket(BaseWebSocket):
     def on_close(self):
         if self.room:
             self.room.leave(self.peerid)
+            if len(self.room.peers) == 0:
+                self.room_manager.delete(self.room.id)
 
     def cmd_new_room(self, data):
         self.room = self.room_manager.new(data['file_meta'])
