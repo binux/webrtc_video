@@ -104,30 +104,30 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
                   if (fdata == _data) {
                     $('#J_hp_result').text('testing address...');
                     // ok
-                    $('#J_hp').attr('disable', false);
-                    $('#J_hp_add').attr('disable', false);
+                    $('#J_hp').attr('disabled', false);
+                    $('#J_hp_add').attr('disabled', false);
                     $('#J_hp_result').text('ok');
                     client.add_http_peer(url);
                   } else {
                     // error
                     peer.close();
-                    $('#J_hp').attr('disable', false);
-                    $('#J_hp_add').attr('disable', false);
+                    $('#J_hp').attr('disabled', false);
+                    $('#J_hp_add').attr('disabled', false);
                     $('#J_hp_result').text('data different');
                   }
                 });
               };
-              peer._onclose = peer.onclose();
+              peer._onclose = peer.onclose;
               peer.onclose = function() {
                 // error
-                $('#J_hp').attr('disable', false);
-                $('#J_hp_add').attr('disable', false);
+                $('#J_hp').attr('disabled', false);
+                $('#J_hp_add').attr('disabled', false);
                 $('#J_hp_result').text('error');
                 if (_.isFunction(peer._onclose)) peer._onclose();
               };
               client.request_block(peer, _.random(client.file_meta.piece_cnt), _.random(client.file_meta.piece_size / client.file_meta.block_size));
-              $('#J_hp').attr('disable', true);
-              $('#J_hp_add').attr('disable', true);
+              $('#J_hp').attr('disabled', true);
+              $('#J_hp_add').attr('disabled', true);
               $('#J_hp_result').text('testing address...');
             }
             return false;

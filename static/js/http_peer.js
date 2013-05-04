@@ -10,17 +10,30 @@ define(['underscore'], function() {
     this.id = url;
     this.url = url;
     this.client = client;
-    this.recved = 0;
+
+    this.init();
   }
 
   HttpPeer.prototype = {
+    init: function() {
+      this._sended = 0;
+      this._recved = 0;
+      this.reqs = {};
+      this.reqs_loaded = {};
+    },
+
     send: function (obj) {
       if (obj.cmd == 'request_block') {
         var start = this.client.file_meta.piece_size*obj.piece+
           this.client.file_meta.block_size*obj.block;
+        var end = start+this.client.file_meta.block_size;
+        var req_id = _.uniqueId('xhr_');
         var req = new XMLHttpRequest();
+        
+        this.reqs[req_id] = req;
+
         req.open('GET', this.url, true);
-        req.setRequestHeader('Range', 'bytes='+start+'-'+(start+this.client.file_meta.block_size-1));
+        req.setRequestHeader('Range', 'bytes='+start+'-'+(end-1));
         req.responseType = 'arraybuffer';
 
         var This = this;
@@ -28,23 +41,22 @@ define(['underscore'], function() {
         req.addEventListener('load', function(evt) {
           if (200 <= req.status && req.status < 300) {
             var data = new Uint8Array(req.response);
-            This.recved += data.byteLength;
             if (_.isFunction(This.onmessage)) {
               This.onmessage({cmd: 'block', piece: obj.piece, block: obj.block, data: data});
             }
+
+            // remove req
+            This.reqs[req_id] = null;
+            delete This.reqs[req_id];
+            This.reqs_loaded[req_id] = 0;
+            delete This.reqs_loaded[req_id];
+            This._recved += data.byteLength;
           } else {
             This.close();
           }
         });
         req.addEventListener('progress', function(evt) {
-          if (evt.lengthComputable) {
-            if (_.isFunction(This.onspeedreport)) {
-              This.onspeedreport({send: 0, sended: 0,
-                                  recv: evt.loaded / ((new Date()).getTime() - start_time) * 1000,
-                                  recved: This.recved+evt.loaded
-              });
-            }
-          }
+          This.reqs_loaded[req_id] = evt.loaded;
         });
         req.addEventListener('error', function() {
           This.close();
@@ -54,7 +66,21 @@ define(['underscore'], function() {
       }
     },
 
+    sended: function() {
+      return 0;
+    },
+
+    recved: function() {
+      return this._recved+
+        _.reduce(_.values(this.reqs_loaded), function(memo, num){ return memo + num; }, 0);
+    },
+
     close: function() {
+      _.each(_.values(this.reqs), function(req) {
+        if (req)
+          req.abort();
+      });
+      this.reqs = {};
       if (this.onclose) {
         this.onclose();
       }

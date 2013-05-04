@@ -22,13 +22,6 @@ define(['underscore'], function() {
     this.ws = ws;
     this.origin = origin;
     this.target = target;
-    this.ready = false;
-    this.closed = false;
-
-    this.peer_connection = null;
-    this.data_channel = null;
-
-    this.connect_timeout = 20*1000;
 
     if (Browser == 'moz') {
       this.pc_config = {
@@ -47,13 +40,23 @@ define(['underscore'], function() {
       ]
     };
 
-    this.maybe_init();
+    this.init();
   }
 
   Peer.prototype = {
 
     init: function() {
       console.debug('Creating PeerConnection');
+      this.ready = false;
+      this.closed = false;
+
+      this.peer_connection = null;
+      this.data_channel = null;
+      this._sended = 0;
+      this._recved = 0;
+
+      this.connect_timeout = 20*1000;
+
       try {
         this.peer_connection = new RTCPeerConnection(this.pc_config, this.pc_constraints);
         this.peer_connection.onicecandidate = _.bind(this.onicecandidate, this);
@@ -78,6 +81,9 @@ define(['underscore'], function() {
       }, this), this.connect_timeout);
     },
 
+    sended: function() { return this._sended; },
+    recved: function() { return this._recved; },
+
     connect: function(label) {
       if (this.data_channel) {
         this.data_channel.close();
@@ -99,17 +105,18 @@ define(['underscore'], function() {
     },
 
     send: function(obj) {
-      if (this.peer_connection && this.peer_connection.iceConnectionState == 'disconnected') {
+      if (this.peer_connection && this.peer_connection.iceConnectionState == 'disconnected')
         this.close();
-      }
       if (this.closed)
         return ;
-      if (_.isObject(obj)) {
+
+      if (_.isObject(obj))
         obj = JSON.stringify(obj);
-      }
+
       if (this.peer_connection && !this.ready) {
         _.delay(_.bind(this.send, this), 2000, obj);
       } else {
+        this._sended += obj.length;
         this.data_channel.send(obj);
       }
     },
@@ -136,13 +143,6 @@ define(['underscore'], function() {
     onready: function() {},
     onclose: function() {},
     onmessage: function() {},
-
-    // private
-    maybe_init: function() {
-      if (this.peer_connection === null) {
-        this.init();
-      }
-    },
 
     transformOutgoingSdp: function(sdp) {
       // important
@@ -228,7 +228,7 @@ define(['underscore'], function() {
       if (_.isFunction(this.onready)) { this.onready(); }
     },
     ondatachannelmessage: function(evt) {
-      console.log('datachannel:', evt.data);
+      this._recved += evt.data.length;
       if (this.onmessage) {
         this.onmessage(evt.data);
       }
@@ -239,7 +239,7 @@ define(['underscore'], function() {
   };
 
   // inherit Peer to support chunked data for chrome
-  function PeerWithChunkSupport(ws, target, origin) {
+  function SlidingWindowPeer(ws, target, origin) {
     this.constructer = Peer;
     this.constructer(ws, target, origin);
     delete this.constructer;
@@ -254,24 +254,17 @@ define(['underscore'], function() {
     this.ack_queue = [];
     this.send_cache = {};
     this.block_cache = {};
-
-    this.send_in_1sec = 0;
-    this.sended = 0;
-    this.recv_in_1sec = 0;
-    this.recved = 0;
   }
-  PeerWithChunkSupport.prototype = _.clone(Peer.prototype);
+  SlidingWindowPeer.prototype = _.clone(Peer.prototype);
 
-  PeerWithChunkSupport.prototype.send = function(data) {
+  SlidingWindowPeer.prototype._send = SlidingWindowPeer.prototype.send;
+
+  SlidingWindowPeer.prototype.send = function(data) {
     if (_.isObject(data)) {
       data = JSON.stringify(data);
     }
-    if (this.peer_connection && !this.ready) {
-      _.delay(_.bind(this.send, this), 2000, data);
-      return ;
-    }
     data = btoa(data);
-    var data_size = data.size || data.length;
+    var data_size = data.length;
     var total_packets = Math.ceil(1.0*data_size/this.chunk_size);
     for (var i=0; i<total_packets; ++i) {
       this.send_queue.push({
@@ -286,32 +279,12 @@ define(['underscore'], function() {
     this.process();
   };
 
-  PeerWithChunkSupport.prototype._onspeedreport = _.throttle(function() {
-    if (_.isFunction(this.onspeedreport)) {
-      this.onspeedreport({send: this.send_in_1sec, sended: this.sended,
-                          recv: this.recv_in_1sec, recved: this.recved});
+  SlidingWindowPeer.prototype.process = function() {
+    if (this.peer_connection && !this.ready) {
+      _.delay(_.bind(this.process, this), 2000);
+      return;
     }
-    this.send_in_1sec = 0;
-    this.recv_in_1sec = 0;
-    this._onspeedreport();
-  }, 1000);
 
-  PeerWithChunkSupport.prototype.retry_send = function(p) {
-    if (this.peer_connection && this.peer_connection.iceConnectionState == 'disconnected') {
-      this.close();
-      return ;
-    }
-    if (this.peer_connection && this.data_channel && _.has(this.send_cache, p)) {
-      //console.debug('send: ', _.omit(this.send_cache[p], 'd'));
-      this.data_channel.send(JSON.stringify(this.send_cache[p]));
-      _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
-      this.send_in_1sec += this.send_cache[p].d.length;
-      this.sended += this.send_cache[p].d.length;
-      this._onspeedreport();
-    }
-  };
-
-  PeerWithChunkSupport.prototype.process = function() {
     while(this.send_queue.length > 0 && _.size(this.send_cache) < this.window_size) {
       var pkg = this.send_queue.shift();
       this.send_cache[pkg.p] = pkg;
@@ -319,25 +292,36 @@ define(['underscore'], function() {
     }
   };
 
-  PeerWithChunkSupport.prototype.real_send_ack = function(p) {
+  SlidingWindowPeer.prototype.retry_send = function(p) {
+    if (this.closed) return;
+
+    if (_.has(this.send_cache, p)) {
+      //console.debug('send: ', _.omit(this.send_cache[p], 'd'));
+      this._send(this.send_cache[p]);
+      _.delay(_.bind(this.retry_send, this), this.resend_interval, p);
+    }
+  };
+
+  SlidingWindowPeer.prototype.send_ack = function(p) {
     if (!_.isEmpty(this.ack_queue)) {
-      this.data_channel.send(JSON.stringify({ack:this.ack_queue}));
+      this._send({ack:this.ack_queue});
       this.ack_queue = [];
     }
   };
 
-  PeerWithChunkSupport.prototype.throttle_send_ack = _.throttle(PeerWithChunkSupport.prototype.real_send_ack, 50);
+  SlidingWindowPeer.prototype.throttle_send_ack = _.throttle(SlidingWindowPeer.prototype.send_ack, 50);
 
-  PeerWithChunkSupport.prototype.ack = function(p) {
+  SlidingWindowPeer.prototype.ack = function(p) {
     this.ack_queue.push(p);
     if (_.size(this.ack_queue) >= 10) {
-      this.real_send_ack();
+      this.send_ack();
     } else {
       this.throttle_send_ack();
     }
   };
   
-  PeerWithChunkSupport.prototype.ondatachannelmessage = function(evt) {
+  SlidingWindowPeer.prototype.ondatachannelmessage = function(evt) {
+    this._recved += evt.data.length;
     var msg = JSON.parse(evt.data);
     //console.debug('recv: ', _.omit(msg, 'd'));
     if (_.has(msg, 'ack')) {
@@ -350,13 +334,11 @@ define(['underscore'], function() {
       this.process();
     } else {
       this.ack(msg.p);
+
       if (!_.has(this.block_cache, msg.b)) {
         this.block_cache[msg.b] = {};
       }
       this.block_cache[msg.b][msg.i] = msg.d;
-      this.recv_in_1sec += msg.d.length;
-      this.recved += msg.d.length;
-      this._onspeedreport();
 
       // recived all blocks
       if (msg.t == _.size(this.block_cache[msg.b])) {
@@ -370,6 +352,6 @@ define(['underscore'], function() {
   };
 
   return {
-    Peer: PeerWithChunkSupport
+    Peer: SlidingWindowPeer
   };
 });

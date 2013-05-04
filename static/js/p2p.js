@@ -4,39 +4,52 @@
 // Created on 2013-04-22 17:20:48
 
 define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.min'], function(peer, hpeer, ws_peer, FileSystem) {
+  function sum(list) {
+    return _.reduce(list, function(memo, num){ return memo + num; }, 0);
+  }
+
+  function now() {
+    return (new Date()).getTime();
+  }
+
   function Client() {
-    this.peerid = null;
-    this.file_meta = null;
-    this.file = null;
-    this.ws = null;
-    this.peers = {};
-    this.ready = false;
     this.min_speed_limit = 16*1024; // 16kb/s
-
-    this.block_per_connect = 4;
-    this.connect_limit = 30;
-    this.inuse_peer = {};
-    this.bad_peer = {};
-    this.blocked_peer = {};
-
-    this.piece_queue = [];
-    this.finished_piece = [];
-    this.finished_block = {};
-    this.pending_block = {};
-    this.block_chunks = {};
-
-    this.peer_speed = {};
-    this.peer_trans = {};
+    this.block_per_connect = 1;
+    this.connect_limit = 20;
 
     this.init();
   }
 
   Client.prototype = {
     init: function() {
+      this.peerid = null;
+      this.file_meta = null;
+      this.file = null;
+      this.ws = null;
+      this.peers = {};
+      this.ready = false;
+
+      this.inuse_peer = {};
+      this.bad_peer = {};
+      this.blocked_peer = {};
+
+      this.piece_queue = [];
+      this.finished_piece = [];
+      this.finished_block = {};
+      this.pending_block = {};
+      this.block_chunks = {};
+
+      this._sended = 0;
+      this._recved = 0;
+      this.peer_trans = {};
+      this.last_speed_report = now();
+      var speed_report_interval = setInterval(_.bind(this.speed_report, this), 1000);
+
       this.ws = new WebSocket(
         (location.protocol == 'https:' ? 'wss://' : 'ws://')+location.host+'/room/ws');
       this.ws.onopen = _.bind(this.onwsopen, this);
       this.ws.onmessage = _.bind(this.onwsmessage, this);
+
     },
 
     new_room: function(file_meta, callback) {
@@ -103,6 +116,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
           p = new ws_peer.Peer(peerid, this);
         else
           p = new peer.Peer(this.ws, this.peerid, peerid);
+        p.id = _.uniqueId('peer_');
 
         this.inuse_peer[peerid] = 0;
         this.peers[peerid] = p;
@@ -128,12 +142,12 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
             this.onpeerdisconnect(p);
           }
         }, this);
-        p.onspeedreport = _.bind(function(report) { this.speed_report(p, report); }, this);
         if (connect) {
           p.connect();
         }
 
         if (_.isFunction(this.onpeerconnect)) {
+          console.log('new connect to '+peerid);
           this.onpeerconnect(p);
         }
         return p;
@@ -178,24 +192,27 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
       }
     },
 
-    speed_report: function(peer, report) {
-      this.peer_trans[peer.id] = this.peer_speed[peer.id] = report;
-      this._reset_speed();
-    },
-    _reset_speed: _.throttle(function() {
-      var send = 0, recv = 0;
-      for (var k in this.peer_speed) {
-        send += this.peer_speed[k].send;
-        recv += this.peer_speed[k].recv;
-      }
+    speed_report: function() {
+      var This = this;
+      _.map(_.values(this.peers), function(peer) {
+        This.peer_trans[peer.id] = {
+          sended: peer.sended(),
+          recved: peer.recved()
+        };
+      });
+      var _sended = sum(_.pluck(_.values(this.peer_trans), 'sended')) || 0;
+      var _recved = sum(_.pluck(_.values(this.peer_trans), 'recved')) || 0;
+
       if (_.isFunction(this.onspeedreport)) {
-        var sended = _.reduce(_.pluck(this.peer_trans, 'sended'), function(memo, num) { return memo+num; }, 0);
-        var recved = _.reduce(_.pluck(this.peer_trans, 'recved'), function(memo, num) { return memo+num; }, 0);
-        this.onspeedreport({send: send, sended: sended, recv: recv, recved: recved});
+        var elapsed = (now() - this.last_speed_report) / 1000;
+        this.onspeedreport({send: (_sended - this._sended) / elapsed, sended: _sended,
+                            recv: (_recved - this._recved) / elapsed, recved: _recved});
       }
-      this.peer_speed = {};
-      this._reset_speed();
-    }, 1000),
+
+      this._sended = _sended;
+      this._recved = _recved;
+      this.last_speed_report = now();
+    },
 
     pickup_block: function() {
       if (_.isEmpty(this.piece_queue)) {
