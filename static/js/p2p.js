@@ -308,7 +308,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
       this.request_block(peer, piece, block);
 
       // set timeout for block, abandon all pending block when one is timeout
-      _.delay(_.bind(this.check_pending, this, best_peer, piece, block, peer.recved(), this._recved, now),
+      _.delay(_.bind(this.check_pending, this, best_peer, piece, block, peer.recved(), this._recved, now()),
               this.check_pending_interval);
 
       return true;
@@ -326,13 +326,17 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
                   this.check_pending_interval);
         } else {
           // timeout
-          console.log('low download speed from '+peerid+'...');
+          console.log('low download speed from '+peerid+'...', speed, global_speed);
           this.bad_peer[peerid] = this.bad_peer[peerid] || 0;
           this.bad_peer[peerid] += 1;
           // close and block the peer for one block time
           this.peers[peerid].close();
           this.blocked_peer[peerid] = 998;
-          _.delay(_.bind(function() { delete this.blocked_peer[peerid]; }, this), this.file_meta.block_size / speed * 1000);
+          _.delay(_.bind(function() {
+            delete this.blocked_peer[peerid];
+            delete this.inuse_peer[peerid];
+            _.defer(_.bind(this.start_process, this));
+          }, this), this.file_meta.block_size / speed * 1000);
           _.defer(_.bind(this.start_process, this));
         }
       }
