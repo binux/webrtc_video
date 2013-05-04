@@ -125,7 +125,8 @@ define(['jquery', 'file_meta', 'p2p', 'utils', 'underscore'], function($, file_m
                 $('#J_hp_result').text('error');
                 if (_.isFunction(peer._onclose)) peer._onclose();
               };
-              client.request_block(peer, _.random(client.file_meta.piece_cnt), _.random(client.file_meta.piece_size / client.file_meta.block_size));
+              peer.send({cmd: 'request_block', piece: _.random(client.file_meta.piece_cnt),
+                         block: _.random(client.file_meta.piece_size / client.file_meta.block_size)});
               $('#J_hp').attr('disabled', true);
               $('#J_hp_add').attr('disabled', true);
               $('#J_hp_result').text('testing address...');

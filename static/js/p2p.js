@@ -13,9 +13,9 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
   }
 
   function Client() {
-    this.min_speed_limit = 16*1024; // 16kb/s
     this.block_per_connect = 1;
     this.connect_limit = 20;
+    this.check_pending_interval = 10*1000; // 10s
 
     this.init();
   }
@@ -116,7 +116,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
           p = new ws_peer.Peer(peerid, this);
         else
           p = new peer.Peer(this.ws, this.peerid, peerid);
-        p.id = _.uniqueId('peer_');
+        p.trans_id = _.uniqueId('peer_');
 
         this.inuse_peer[peerid] = 0;
         this.peers[peerid] = p;
@@ -137,6 +137,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
         }, this);
         p.onclose = _.bind(function() {
           console.log('peer connect with '+peerid+' disconnected;');
+          this.remove_pending(peerid);
           delete this.peers[peerid];
           if (_.isFunction(this.onpeerdisconnect)) {
             this.onpeerdisconnect(p);
@@ -167,11 +168,14 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
 
     request_block: function(peer, piece, block) {
       //console.debug('request_block: '+peer.target+', '+piece+', '+block);
+      this.inuse_peer[peer.id] += 1;
+      this.pending_block[piece][block] = peer.id;
       peer.send({cmd: 'request_block', piece: piece, block: block});
     },
 
     recv_block: function(peer, piece, block, data) {
       //console.log('recv block '+piece+','+block);
+      this.inuse_peer[peer.id] -= 1;
       if (this.finished_block[piece] && this.finished_block[piece][block] != 1) {
         // conv to arraybuffer
         if (data.byteLength === undefined) {
@@ -183,7 +187,6 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
         }
 
         if (this.pending_block[piece][block]) {
-          this.inuse_peer[this.pending_block[piece][block]] -= 1;
           this.pending_block[piece][block] = 0;
         }
         this.finished_block[piece][block] = 1;
@@ -195,7 +198,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
     speed_report: function() {
       var This = this;
       _.map(_.values(this.peers), function(peer) {
-        This.peer_trans[peer.id] = {
+        This.peer_trans[peer.trans_id] = {
           sended: peer.sended(),
           recved: peer.recved()
         };
@@ -302,31 +305,46 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
       var peer = this.ensure_connection(best_peer, true);
 
       // mark
-      this.inuse_peer[best_peer] += 1;
-      this.pending_block[piece][block] = best_peer;
       this.request_block(peer, piece, block);
 
       // set timeout for block, abandon all pending block when one is timeout
-      _.delay(_.bind(this.check_pending, this, best_peer, piece, block),
-              this.file_meta.block_size / this.min_speed_limit * 1000);
+      _.delay(_.bind(this.check_pending, this, best_peer, piece, block, peer.recved(), this._recved, now),
+              this.check_pending_interval);
 
       return true;
     },
 
-    check_pending: function(key, piece, block) {
-      if (this.pending_block[piece] && this.pending_block[piece][block] == key) {
-        console.log('block '+piece+', '+block+' from '+key+' timeout.');
-        for (var p in this.pending_block) {
-          for (var b=0; b<this.pending_block[p].length; b++) {
-            if (this.pending_block[p][b] == key) {
-              this.inuse_peer[key] -= 1;
-              this.pending_block[p][b] = 0;
-              this.bad_peer[key] = this.bad_peer[key] || 0;
-              this.bad_peer[key] += 1;
-            }
+    check_pending: function(peerid, piece, block, last_recved, total_recved, last_time) {
+      // it's still working on it
+      if (this.pending_block[piece] && this.pending_block[piece][block] == peerid && this.peers[peerid]) {
+        var recved = this.peers[peerid].recved();
+        var speed = (recved - last_recved) / (now() - last_time) * 1000;
+        var global_speed = (this._recved - total_recved) / (now() - last_time) * 1000;
+        if (speed > global_speed / _.size(this.peers) / 4) {  // 1/4 of avg speed
+          // ok
+          _.delay(_.bind(this.check_pending, this, peerid, piece, block, recved, this._recved, now()),
+                  this.check_pending_interval);
+        } else {
+          // timeout
+          console.log('low download speed from '+peerid+'...');
+          this.bad_peer[peerid] = this.bad_peer[peerid] || 0;
+          this.bad_peer[peerid] += 1;
+          // close and block the peer for one block time
+          this.peers[peerid].close();
+          this.blocked_peer[peerid] = 998;
+          _.delay(_.bind(function() { delete this.blocked_peer[peerid]; }, this), this.file_meta.block_size / speed * 1000);
+          _.defer(_.bind(this.start_process, this));
+        }
+      }
+    },
+
+    remove_pending: function(peerid) {
+      for (var p in this.pending_block) {
+        for (var b=0; b<this.pending_block[p].length; b++) {
+          if (this.pending_block[p][b] == peerid) {
+            this.pending_block[p][b] = 0;
           }
         }
-        _.defer(_.bind(this.start_process, this));
       }
     },
 
@@ -344,7 +362,8 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
           // check all finished
           if (_.all(This.finished_piece) && _.isEmpty(This.piece_queue) &&
               _.isFunction(This.onfinished)) {
-            This.onfinished();
+            This.finishonce = This.finishonce || _.once(This.onfinished);
+            This.finishonce();
           }
         });
         this.finished_piece[piece] = 1;

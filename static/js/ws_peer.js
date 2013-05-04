@@ -35,7 +35,7 @@ define(['underscore'], function() {
     },
 
     _onwsmessage: function(evt) {
-      this._recved += evt.data.byteLength || evt.data.length;
+      this._recved += evt.data.byteLength || evt.data.length || 0;
       
       if (evt.data.length) {
         var msg = JSON.parse(evt.data);

@@ -247,6 +247,16 @@ define(['underscore'], function() {
     this.chunk_size = 800;
     this.window_size = 100;
     this.resend_interval = 10000;
+  }
+  SlidingWindowPeer.prototype = _.clone(Peer.prototype);
+
+  SlidingWindowPeer.prototype._init = SlidingWindowPeer.prototype.init;
+  SlidingWindowPeer.prototype._send = SlidingWindowPeer.prototype.send;
+  SlidingWindowPeer.prototype._close = SlidingWindowPeer.prototype.close;
+
+  SlidingWindowPeer.prototype.init = function(data) {
+    this._init();
+
     this.block_no = 1;
     this.packet_no = 1;
     
@@ -254,10 +264,7 @@ define(['underscore'], function() {
     this.ack_queue = [];
     this.send_cache = {};
     this.block_cache = {};
-  }
-  SlidingWindowPeer.prototype = _.clone(Peer.prototype);
-
-  SlidingWindowPeer.prototype._send = SlidingWindowPeer.prototype.send;
+  },
 
   SlidingWindowPeer.prototype.send = function(data) {
     if (_.isObject(data)) {
@@ -277,6 +284,18 @@ define(['underscore'], function() {
     }
     this.block_no++;
     this.process();
+  };
+
+  SlidingWindowPeer.prototype.close = function() {
+    this._close();
+
+    this.block_no = 1;
+    this.packet_no = 1;
+    
+    this.send_queue = [];
+    this.ack_queue = [];
+    this.send_cache = {};
+    this.block_cache = {};
   };
 
   SlidingWindowPeer.prototype.process = function() {
