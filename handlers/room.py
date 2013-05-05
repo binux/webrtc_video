@@ -20,9 +20,10 @@ class ListRoomHandler(BaseHandler):
 
 class RoomHandler(BaseHandler):
     def get(self, roomid):
-        if not self.room_manager.get(roomid):
+        room = self.room_manager.get(roomid)
+        if not room:
             raise HTTPError(404)
-        self.render('room/index.html', roomid = roomid)
+        self.render('room/index.html', room = room)
 
 class RoomWebSocket(BaseWebSocket):
     def open(self):

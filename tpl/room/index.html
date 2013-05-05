@@ -1,15 +1,16 @@
 {% extends ../base.html %}
 
+{% block title %}webrtc_video - {{ room.meta.get('filename') }}{% end %}
+
 {% block main %}
 <section>
-  <ul id=J_console>
-  </ul>
+  <ul id=J_console> </ul>
 </section>
 {% end %}
 
 {% block script %}
 <script>
-  window.roomid = '{{ roomid }}';
+  window.roomid = '{{ room.id }}';
   require(['room.app'], function(room) {
     window.client = room.client;
   });
