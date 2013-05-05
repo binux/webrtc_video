@@ -309,7 +309,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
 
       // set timeout for block, abandon all pending block when one is timeout
       _.delay(_.bind(this.check_pending, this, best_peer, piece, block, peer.recved(), this._recved, now()),
-              this.check_pending_interval);
+              this.check_pending_interval * 2);
 
       return true;
     },
@@ -336,7 +336,7 @@ define(['peer', 'http_peer', 'ws_peer', 'file_system', 'underscore', 'lib/sha1.m
             delete this.blocked_peer[peerid];
             delete this.inuse_peer[peerid];
             _.defer(_.bind(this.start_process, this));
-          }, this), this.file_meta.block_size / speed * 1000);
+          }, this), (this.file_meta.block_size / speed > 120 ? 120 : this.file_meta.block_size / speed) * 1000);
           _.defer(_.bind(this.start_process, this));
         }
       }
