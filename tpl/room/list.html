@@ -1,10 +1,15 @@
 {% extends ../base.html %}
 
 {% block main %}
+{% if rooms %}
 <ul>
   {% for room in rooms.itervalues() %}
   <li><a href=/room/{{ room.hash }}>{{ room.title }}</a>
   {% end %}
+<ul>
+{% else %}
+empty
+{% end %}
 {% end %}
 
 {% block script %}

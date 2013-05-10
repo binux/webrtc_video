@@ -132,7 +132,7 @@ define(['jquery', 'p2p', 'utils', 'underscore'], function($, p2p, utils) {
     client.onpiece = function(piece) {
       $('#J_progress').text(''+(_.filter(client.finished_piece, _.identity).length / client.finished_piece.length * 100).toFixed(2)+'%');
 
-      if (piece === 0 && 'video/ogg,video/mp4,video/webm'.indexOf(client.file_meta.type) != -1) {
+      if (piece === 0 && 'video/ogg,video/mp4,video/webm,audio/ogg'.indexOf(client.file_meta.type) != -1) {
         create_video(client.file.toURL());
       }
     };

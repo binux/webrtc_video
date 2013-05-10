@@ -20,7 +20,7 @@ python application.py
 # How To Use
 ### Share
 1. visit `/room/new`
-2. choice a file to share.
+2. select a file to share.
 3. share this link like `/room/{{ hash }}` to others.
 3. **DO NOT CLOSE THE PAGE!**
 
